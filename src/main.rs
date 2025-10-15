@@ -1,6 +1,6 @@
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
-use econosim_bevy::components::common::{Id, Name};
+use econosim_bevy::components::common::{ComponentId, Id, Name};
 use econosim_bevy::components::economy::recipe::Recipe;
 use econosim_bevy::components::economy::resource::Resource;
 
@@ -11,9 +11,28 @@ fn create_resources(mut commands: Commands) {
     commands.spawn((Resource {}, Name("Coal".to_string()), Id(3)));
 }
 
+fn create_recipes(mut commands: Commands) {
+    let mut ingredients = HashMap::new();
+    ingredients.insert(0, 10.0); // 10 Water
+    ingredients.insert(1, 5.0); // 5 Dirt
+
+    let mut products = HashMap::new();
+    products.insert(2, 1.0); // 1 Wood
+
+    commands.spawn((
+        Recipe {
+            ingredients,
+            products,
+            production_speed: 1.0,
+        },
+        Name("Water + Dirt -> Wood".to_string()),
+        Id(0),
+    ));
+}
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_systems(Startup, create_resources)
+        .add_systems(Startup, (create_resources, create_recipes))
         .run();
 }
