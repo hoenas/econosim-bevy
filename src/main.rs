@@ -1,6 +1,7 @@
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
-use econosim_bevy::components::common::{ComponentId, Id, Name};
+use econosim_bevy::components::common::{Id, Name};
+use econosim_bevy::components::economy::processor::Processor;
 use econosim_bevy::components::economy::recipe::Recipe;
 use econosim_bevy::components::economy::resource::Resource;
 
@@ -31,9 +32,24 @@ fn create_recipes(mut commands: Commands) {
     ));
 }
 
+fn create_processors(mut commands: Commands) {
+    commands.spawn((
+        Processor {
+            production_speed: 1.0,
+            productive: true,
+            recipe: 0,
+        },
+        Name("Processor Wood".to_string()),
+        Id(0),
+    ));
+}
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_systems(Startup, (create_resources, create_recipes))
+        .add_systems(
+            Startup,
+            (create_resources, create_recipes, create_processors),
+        )
         .run();
 }
