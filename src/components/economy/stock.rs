@@ -1,10 +1,10 @@
-use crate::components::common::ComponentId;
 use bevy::prelude::Component;
+use bevy::prelude::Entity;
 use std::collections::HashMap;
 
 #[derive(Component)]
 pub struct Stock {
-    pub resources: HashMap<ComponentId, f64>,
+    pub resources: HashMap<Entity, f64>,
 }
 
 impl Default for Stock {

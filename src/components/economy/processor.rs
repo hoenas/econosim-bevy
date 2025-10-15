@@ -1,5 +1,5 @@
-use crate::components::common::Id;
 use crate::components::economy::production_speed::ProductionSpeed;
+use crate::components::economy::recipe::Recipe;
 use bevy::ecs::bundle::Bundle;
 use bevy::prelude::Component;
 
@@ -10,7 +10,7 @@ pub struct Productive(pub bool);
 pub struct Processor {
     pub production_speed: ProductionSpeed,
     pub productive: Productive,
-    pub recipe: Id,
+    pub recipe: Recipe,
 }
 
 #[derive(Component)]
