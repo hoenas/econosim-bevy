@@ -7,8 +7,8 @@ pub struct Stock {
     pub resources: HashMap<ComponentId, f64>,
 }
 
-impl Stock {
-    pub fn new() -> Self {
+impl Default for Stock {
+    fn default() -> Self {
         Self {
             resources: HashMap::new(),
         }

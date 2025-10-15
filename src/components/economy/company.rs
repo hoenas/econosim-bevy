@@ -1,3 +1,5 @@
+use crate::components::common::Id;
+use crate::components::common::Name;
 use crate::components::economy::currency::Currency;
 use crate::components::economy::processor::Processors;
 use crate::components::economy::stock::Stock;
@@ -8,4 +10,6 @@ pub struct Company {
     pub stock: Stock,
     pub currency: Currency,
     pub processors: Processors,
+    pub id: Id,
+    pub name: Name,
 }
