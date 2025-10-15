@@ -1,6 +1,7 @@
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use econosim_bevy::components::common::{Id, Name};
+use econosim_bevy::components::economy::company::Company;
 use econosim_bevy::components::economy::processor::Processor;
 use econosim_bevy::components::economy::recipe::Recipe;
 use econosim_bevy::components::economy::resource::Resource;
@@ -44,12 +45,16 @@ fn create_processors(mut commands: Commands) {
     ));
 }
 
+fn create_companies(mut commands: Commands) {
+    commands.spawn((Company::new(), Name("My Company".to_string()), Id(0)));
+}
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(
             Startup,
-            (create_resources, create_recipes, create_processors),
+            (create_resources, create_recipes, create_companies),
         )
         .run();
 }
