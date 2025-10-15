@@ -13,11 +13,12 @@ fn create_resources(mut commands: Commands) {
 
 fn create_recipes(mut commands: Commands) {
     let mut ingredients = HashMap::new();
-    ingredients.insert(0, 10.0); // 10 Water
-    ingredients.insert(1, 5.0); // 5 Dirt
+    ingredients.insert(0, 10.0); // Water
+    ingredients.insert(1, 10.0); // Dirt
+    ingredients.insert(2, 10.0); // Wood
 
     let mut products = HashMap::new();
-    products.insert(2, 1.0); // 1 Wood
+    products.insert(3, 1.0); // Coal
 
     commands.spawn((
         Recipe {
