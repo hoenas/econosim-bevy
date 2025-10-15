@@ -1,5 +1,4 @@
 use crate::components::common::ComponentId;
-use crate::components::common::Id;
 use crate::components::common::Name;
 use crate::components::economy::production_speed::ProductionSpeed;
 use bevy::ecs::bundle::Bundle;
@@ -17,5 +16,4 @@ pub struct Recipe {
     pub ingredients: Ingredients,
     pub products: Products,
     pub production_speed: ProductionSpeed,
-    pub id: Id,
 }
