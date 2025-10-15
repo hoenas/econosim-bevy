@@ -2,9 +2,11 @@ use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use econosim_bevy::components::common::{Id, Name};
 use econosim_bevy::components::economy::company::Company;
-use econosim_bevy::components::economy::processor::Processor;
+use econosim_bevy::components::economy::currency::Currency;
+use econosim_bevy::components::economy::processor::{Processor, Processors};
 use econosim_bevy::components::economy::recipe::Recipe;
 use econosim_bevy::components::economy::resource::Resource;
+use econosim_bevy::components::economy::stock::Stock;
 
 fn create_resources(mut commands: Commands) {
     commands.spawn((Resource {}, Name("Water".to_string()), Id(0)));
@@ -46,7 +48,21 @@ fn create_processors(mut commands: Commands) {
 }
 
 fn create_companies(mut commands: Commands) {
-    commands.spawn((Company::new(), Name("My Company".to_string()), Id(0)));
+    commands.spawn((
+        Company {
+            stock: Stock::new(),
+            currency: Currency(1000.0),
+            processors: Processors {
+                processors: vec![Processor {
+                    production_speed: 1.0,
+                    productive: true,
+                    recipe: 0,
+                }],
+            },
+        },
+        Name("Company A".to_string()),
+        Id(0),
+    ));
 }
 
 fn main() {

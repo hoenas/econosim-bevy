@@ -7,3 +7,8 @@ pub struct Processor {
     pub productive: bool,
     pub recipe: ComponentId,
 }
+
+#[derive(Component)]
+pub struct Processors {
+    pub processors: Vec<Processor>,
+}
