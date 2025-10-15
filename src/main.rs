@@ -26,7 +26,7 @@ fn create_recipes(mut commands: Commands) {
             products,
             production_speed: 1.0,
         },
-        Name("Water + Dirt -> Wood".to_string()),
+        Name("Coal".to_string()),
         Id(0),
     ));
 }
