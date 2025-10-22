@@ -28,20 +28,22 @@ fn create_companies(mut commands: Commands) {
     resources.insert(0, 1000.0);
     resources.insert(1, 1000.0);
     resources.insert(2, 1000.0);
-    commands.spawn((Company {
-        stock: Stock {
-            resources: resources,
-        },
-        currency: Currency(1000.0),
-        processors: Processors {
-            processors: vec![Processor {
-                production_speed: ProductionSpeed(1.0),
-                productive: Productive(true),
-                recipe: Recipe(0),
-            }],
-        },
-        name: Name("Company A".to_string()),
-    },));
+    for company in 0..3 {
+        commands.spawn((Company {
+            stock: Stock {
+                resources: resources.clone(),
+            },
+            currency: Currency(1000.0),
+            processors: Processors {
+                processors: vec![Processor {
+                    production_speed: ProductionSpeed(1.0),
+                    productive: Productive(true),
+                    recipe: Recipe(0),
+                }],
+            },
+            name: Name(format!("Company{}", company)),
+        },));
+    }
 }
 
 #[derive(Component)]

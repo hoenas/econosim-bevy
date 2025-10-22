@@ -21,15 +21,14 @@ pub fn draw_companies(
     resources: Res<Resources>,
 ) {
     let text_font = TextFont {
-        font_size: 50.0,
+        font_size: 14.0,
         ..default()
     };
-    let text_justification = Justify::Center;
     if query.is_empty() {
         println!("No companies to draw.");
         return;
     }
-    for (name, stock) in query.iter() {
+    for (index, (name, stock)) in query.iter().enumerate() {
         let mut stock_text = format!("{}:", name.0);
         for (resource_id, resource_name) in resources.resources.iter().sorted() {
             let amount = stock.resources.get(&resource_id).cloned().unwrap_or(0.0);
@@ -39,8 +38,8 @@ pub fn draw_companies(
         commands.spawn((
             Text2d::new(stock_text),
             text_font.clone(),
-            TextLayout::new_with_justify(text_justification),
-            Transform::from_translation(Vec3::new(0.0, 100.0, 0.0)),
+            TextLayout::new_with_justify(Justify::Left),
+            Transform::from_translation(Vec3::new(0.0, 20.0 * (index as f32), 0.0)),
             TextBackgroundColor(Color::BLACK.with_alpha(0.5)),
             Text2dShadow::default(),
             MarkerStockText::default(),
