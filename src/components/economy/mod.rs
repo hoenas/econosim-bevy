@@ -1,5 +1,7 @@
 pub mod company;
 pub mod currency;
+pub mod offer;
+pub mod order;
 pub mod processor;
 pub mod production_speed;
 pub mod recipe;
