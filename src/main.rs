@@ -1,7 +1,7 @@
 use bevy::camera::Camera2d;
 use bevy::prelude::*;
 use econosim_bevy::components::common::Name;
-use econosim_bevy::components::economy::company::Company;
+use econosim_bevy::components::economy::company::{Company, CompanyHandle};
 use econosim_bevy::components::economy::currency::Currency;
 use econosim_bevy::components::economy::processor::Productive;
 use econosim_bevy::components::economy::processor::{Processor, Processors};
@@ -42,6 +42,7 @@ fn create_companies(mut commands: Commands) {
                 }],
             },
             name: Name(format!("Company{}", company)),
+            handle: CompanyHandle(company),
         },));
     }
 }
