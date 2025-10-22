@@ -11,7 +11,7 @@ use econosim_bevy::components::economy::stock::Stock;
 use econosim_bevy::resources::economy::common::Id;
 use econosim_bevy::resources::economy::recipes::Recipes;
 use econosim_bevy::resources::economy::resources::Resources;
-use econosim_bevy::systems::economy::draw_companies::draw_companies;
+use econosim_bevy::systems::economy::draw_companies::{clean_company_texts, draw_companies};
 use econosim_bevy::systems::economy::processor::update_processors;
 use std::collections::HashMap;
 
@@ -65,6 +65,6 @@ fn main() {
             (create_resources, create_recipes, create_companies),
         )
         .add_systems(Update, update_processors)
-        .add_systems(Update, draw_companies)
+        .add_systems(Update, (clean_company_texts, draw_companies))
         .run();
 }

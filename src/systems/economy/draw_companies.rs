@@ -1,28 +1,41 @@
+use crate::components::common::Name;
 use crate::components::economy::stock::Stock;
+use crate::resources::economy::resources::Resources;
 use bevy::{prelude::*, sprite::Text2dShadow};
+use itertools::Itertools;
 
-pub fn draw_companies(mut commands: Commands, query: Query<&Stock>) {
+use bevy::prelude::Component;
+
+#[derive(Component, Default)]
+pub struct MarkerStockText();
+
+pub fn clean_company_texts(mut commands: Commands, query: Query<Entity, With<MarkerStockText>>) {
+    for entity in query.iter() {
+        commands.entity(entity).despawn();
+    }
+}
+
+pub fn draw_companies(
+    mut commands: Commands,
+    query: Query<(&Name, &Stock)>,
+    resources: Res<Resources>,
+) {
     let text_font = TextFont {
         font_size: 50.0,
         ..default()
     };
     let text_justification = Justify::Center;
-    // commands.spawn(Camera2d);
     if query.is_empty() {
         println!("No companies to draw.");
         return;
     }
-    for stock in query.iter() {
-        println!("Doing something");
-        let stock_text = format!(
-            "{}",
-            stock
-                .resources
-                .iter()
-                .map(|(id, amount)| format!("{}: {:.1}", id, amount))
-                .collect::<Vec<String>>()
-                .join(", ")
-        );
+    for (name, stock) in query.iter() {
+        let mut stock_text = format!("{}:", name.0);
+        for (resource_id, resource_name) in resources.resources.iter().sorted() {
+            let amount = stock.resources.get(&resource_id).cloned().unwrap_or(0.0);
+            stock_text.push_str(&format!(" {}: {:.2}", resource_name, amount));
+        }
+
         commands.spawn((
             Text2d::new(stock_text),
             text_font.clone(),
@@ -30,6 +43,7 @@ pub fn draw_companies(mut commands: Commands, query: Query<&Stock>) {
             Transform::from_translation(Vec3::new(0.0, 100.0, 0.0)),
             TextBackgroundColor(Color::BLACK.with_alpha(0.5)),
             Text2dShadow::default(),
+            MarkerStockText::default(),
         ));
     }
 }
