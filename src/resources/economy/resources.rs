@@ -2,6 +2,8 @@ use crate::resources::economy::common::Id;
 use bevy::prelude::Resource;
 use std::collections::HashMap;
 
+pub type ResourceHandle = usize;
+
 #[derive(Resource)]
 pub struct Resources {
     pub resources: HashMap<Id, String>,
