@@ -13,6 +13,7 @@ use econosim_bevy::resources::economy::marketplace::Marketplace;
 use econosim_bevy::resources::economy::recipes::Recipes;
 use econosim_bevy::resources::economy::resources::Resources;
 use econosim_bevy::systems::economy::draw_companies::{clean_company_texts, draw_companies};
+use econosim_bevy::systems::economy::marketplace::{update_order_index, update_price_index};
 use econosim_bevy::systems::economy::processor::update_processors;
 use std::collections::HashMap;
 
@@ -77,7 +78,10 @@ fn main() {
                 create_companies,
             ),
         )
+        // Update companies
         .add_systems(Update, update_processors)
         .add_systems(Update, (clean_company_texts, draw_companies))
+        // Update market
+        .add_systems(Update, (update_price_index, update_order_index))
         .run();
 }
