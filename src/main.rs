@@ -9,6 +9,7 @@ use econosim_bevy::components::economy::production_speed::ProductionSpeed;
 use econosim_bevy::components::economy::recipe::Recipe;
 use econosim_bevy::components::economy::stock::Stock;
 use econosim_bevy::resources::economy::common::Id;
+use econosim_bevy::resources::economy::marketplace::Marketplace;
 use econosim_bevy::resources::economy::recipes::Recipes;
 use econosim_bevy::resources::economy::resources::Resources;
 use econosim_bevy::systems::economy::draw_companies::{clean_company_texts, draw_companies};
@@ -16,11 +17,15 @@ use econosim_bevy::systems::economy::processor::update_processors;
 use std::collections::HashMap;
 
 fn create_resources(mut commands: Commands) {
-    commands.insert_resource(Recipes::default());
+    commands.insert_resource(Resources::default());
 }
 
 fn create_recipes(mut commands: Commands) {
-    commands.insert_resource(Resources::default());
+    commands.insert_resource(Recipes::default());
+}
+
+fn create_marketplace(mut commands: Commands) {
+    commands.insert_resource(Marketplace::default());
 }
 
 fn create_companies(mut commands: Commands) {
@@ -65,7 +70,12 @@ fn main() {
         .add_systems(Startup, setup_camera)
         .add_systems(
             Startup,
-            (create_resources, create_recipes, create_companies),
+            (
+                create_resources,
+                create_recipes,
+                create_marketplace,
+                create_companies,
+            ),
         )
         .add_systems(Update, update_processors)
         .add_systems(Update, (clean_company_texts, draw_companies))
