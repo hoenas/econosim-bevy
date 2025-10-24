@@ -1,5 +1,7 @@
+use crate::components::common::TimeToLive;
 use crate::components::economy::company::CompanyHandle;
 use crate::resources::economy::common::Id;
+use bevy::ecs::bundle::Bundle;
 use bevy::prelude::Component;
 
 pub type OrderHandle = usize;
@@ -10,6 +12,11 @@ pub struct Order {
     pub resource: Id,
     pub amount: f64,
     pub max_price_per_unit: f64,
-    pub time_to_live: usize,
     pub handle: OrderHandle,
+}
+
+#[derive(Bundle)]
+pub struct OrderBundle {
+    pub order: Order,
+    pub time_to_live: TimeToLive,
 }

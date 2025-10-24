@@ -1,3 +1,4 @@
+use crate::components::common::TimeToLive;
 use crate::components::economy::offer::{Offer, OfferHandle};
 use crate::components::economy::order::{Order, OrderHandle};
 use crate::resources::economy::marketplace::Marketplace;
@@ -107,12 +108,18 @@ pub fn get_order_by_handle(
     market_data.orders.get(&order_handle)
 }
 
-fn execute_orders(market_data: &mut MarketData, companies: &mut Vec<Company>) {
+
+fn execute_orders(
+    orders: Query<&mut Order>,
+    offers: Query<&mut Offer>,
+    resources: Res<Resources>,
+    mut market_data: ResMut<Marketplace>,
+) {
     // Check all orders
-    for order in market_data.orders.values_mut() {
+    for order in orders.iter_mut() {
         // We are trying to fulfill the hole order
         while order.amount > 0.0 {
-            match self.get_cheapest_offer(order.resource, &market_data.offers) {
+            match get_cheapest_offer(order.resource, offers) {
                 Some(value) => {
                     let offer_handle = value.0;
                     let offer_price = value.1;
