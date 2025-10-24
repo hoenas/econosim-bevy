@@ -1,4 +1,3 @@
-use crate::components::economy::company::Company;
 use crate::components::economy::currency::Currency;
 use crate::components::economy::offer::Offer;
 use crate::components::economy::order::Order;
@@ -83,7 +82,7 @@ pub fn place_order(order: Order, market_data: &mut MarketData) -> Option<OfferHa
 }
 */
 
-fn execute_orders(
+pub fn execute_orders(
     mut orders: Query<&mut Order>,
     mut offers: Query<(Entity, &mut Offer)>,
     mut companies: Query<(&mut Stock, &mut Currency)>,
