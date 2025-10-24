@@ -1,7 +1,7 @@
 use bevy::camera::Camera2d;
 use bevy::prelude::*;
 use econosim_bevy::components::common::Name;
-use econosim_bevy::components::economy::company::{Company, CompanyHandle};
+use econosim_bevy::components::economy::company::Company;
 use econosim_bevy::components::economy::currency::Currency;
 use econosim_bevy::components::economy::processor::Productive;
 use econosim_bevy::components::economy::processor::{Processor, Processors};
@@ -32,9 +32,9 @@ fn create_marketplace(mut commands: Commands) {
 
 fn create_companies(mut commands: Commands) {
     let mut resources: HashMap<Id, f64> = HashMap::new();
-    resources.insert(0, 1000.0);
-    resources.insert(1, 1000.0);
-    resources.insert(2, 1000.0);
+    resources.insert(0, 10000.0);
+    resources.insert(1, 10000.0);
+    resources.insert(2, 10000.0);
     for company in 0..3 {
         commands.spawn((Company {
             stock: Stock {
@@ -49,7 +49,6 @@ fn create_companies(mut commands: Commands) {
                 }],
             },
             name: Name(format!("Company{}", company)),
-            handle: CompanyHandle(company),
         },));
     }
 }

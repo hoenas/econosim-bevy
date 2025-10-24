@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 bevy = "0.17.2"
 itertools = "0.14.0"
+ordered-float = "5.1.0"

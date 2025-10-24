@@ -1,71 +1,59 @@
-use crate::components::common::TimeToLive;
-use crate::components::economy::offer::{Offer, OfferHandle};
-use crate::components::economy::order::{Order, OrderHandle};
+use crate::components::economy::company::Company;
+use crate::components::economy::currency::Currency;
+use crate::components::economy::offer::Offer;
+use crate::components::economy::order::Order;
+use crate::components::economy::stock::Stock;
 use crate::resources::economy::marketplace::Marketplace;
 use crate::resources::economy::resources::{ResourceHandle, Resources};
 use bevy::prelude::Query;
 use bevy::prelude::Res;
 use bevy::prelude::*;
 use itertools::Itertools;
+use ordered_float::OrderedFloat;
 
 pub fn update_price_index(
-    offers: Query<&Offer>,
+    offers: Query<(Entity, &Offer)>,
     resources: Res<Resources>,
     mut market_data: ResMut<Marketplace>,
 ) {
-    for resource_handle in resources.resources.keys().sorted() {
-        let offer = get_cheapest_offer(*resource_handle, offers);
+    for resource_handle in resources.resources.keys() {
+        let offer = get_cheapest_offer(*resource_handle, offers.iter());
         market_data.price_index.insert(*resource_handle, offer);
     }
 }
 
 pub fn update_order_index(
-    orders: Query<&Order>,
+    orders: Query<(Entity, &Order)>,
     resources: Res<Resources>,
     mut market_data: ResMut<Marketplace>,
 ) {
     for resource_handle in resources.resources.keys().sorted() {
-        let order = get_highest_order(*resource_handle, orders);
+        let order = get_highest_order(*resource_handle, orders.iter());
         market_data.order_index.insert(*resource_handle, order);
     }
 }
 
-pub fn get_cheapest_offer(
+pub fn get_cheapest_offer<'a>(
     resource: ResourceHandle,
-    offers: Query<&Offer>,
-) -> Option<(OfferHandle, f64)> {
-    let mut cheapest_offer: Option<(OfferHandle, f64)> = None;
-    for offer in offers.iter() {
-        if offer.resource == resource {
-            if cheapest_offer.is_none() {
-                cheapest_offer = Some((offer.handle, offer.price_per_unit));
-            } else if cheapest_offer.unwrap().1 > offer.price_per_unit {
-                cheapest_offer = Some((offer.handle, offer.price_per_unit));
-            }
-        }
-    }
-    cheapest_offer
+    offers: impl Iterator<Item = (Entity, &'a Offer)>,
+) -> Option<(Entity, f64)> {
+    offers
+        .filter(|(_, order)| order.resource == resource)
+        .max_by_key(|x| OrderedFloat(x.1.price_per_unit))
+        .map(|x| (x.0, x.1.price_per_unit))
 }
 
-pub fn get_highest_order(
+pub fn get_highest_order<'a>(
     resource: ResourceHandle,
-    orders: Query<&Order>,
-) -> Option<(OrderHandle, f64)> {
-    let mut highest_order: Option<(OrderHandle, f64)> = None;
-    for order in orders.iter() {
-        if order.resource == resource {
-            if highest_order.is_none() {
-                highest_order = Some((order.handle, order.max_price_per_unit));
-            } else if highest_order.unwrap().1 < order.max_price_per_unit {
-                highest_order = Some((order.handle, order.max_price_per_unit));
-            }
-        }
-    }
-    highest_order
+    orders: impl Iterator<Item = (Entity, &'a Order)>,
+) -> Option<(Entity, f64)> {
+    orders
+        .filter(|(_, order)| order.resource == resource)
+        .max_by_key(|x| OrderedFloat(x.1.max_price_per_unit))
+        .map(|x| (x.0, x.1.max_price_per_unit))
 }
 
 /*
-
 pub fn place_offer(offer: Offer, market_data: &mut MarketData) -> Option<OfferHandle> {
     // Offer sanity checks
     if offer.amount <= 0.0 || offer.resource >= market_data.resource_count {
@@ -93,129 +81,53 @@ pub fn place_order(order: Order, market_data: &mut MarketData) -> Option<OfferHa
     self.update_order_index(market_data);
     Some(self.next_order_id)
 }
-
-pub fn get_offer_by_handle(
-    offer_handle: OfferHandle,
-    market_data: &mut MarketData,
-) -> Option<&Offer> {
-    market_data.offers.get(&offer_handle)
-}
-
-pub fn get_order_by_handle(
-    order_handle: OrderHandle,
-    market_data: &mut MarketData,
-) -> Option<&Order> {
-    market_data.orders.get(&order_handle)
-}
-
+*/
 
 fn execute_orders(
-    orders: Query<&mut Order>,
-    offers: Query<&mut Offer>,
+    mut orders: Query<&mut Order>,
+    mut offers: Query<(Entity, &mut Offer)>,
+    mut companies: Query<(&mut Stock, &mut Currency)>,
     resources: Res<Resources>,
     mut market_data: ResMut<Marketplace>,
 ) {
     // Check all orders
-    for order in orders.iter_mut() {
-        // We are trying to fulfill the hole order
+    for mut order in orders.iter_mut() {
+        // We are trying to fulfill the whole order
         while order.amount > 0.0 {
-            match get_cheapest_offer(order.resource, offers) {
-                Some(value) => {
-                    let offer_handle = value.0;
-                    let offer_price = value.1;
-                    if offer_price <= order.max_price_per_unit {
-                        match market_data.offers.get_mut(&offer_handle) {
-                            Some(offer) => {
-                                if offer.amount < order.amount {
-                                    // Offer will be consumed
-                                    // Order will be partly finished
-                                    // Consume offer
-                                    order.amount -= offer.amount;
-                                    // Check if the order was created by a real company
-                                    match order.company {
-                                        // Give resources to company
-                                        Some(ordering_company) => {
-                                            companies[ordering_company]
-                                                .stock
-                                                .add_resource_to_stock(
-                                                    order.resource,
-                                                    offer.amount,
-                                                );
-                                            // Give delta currency from max price back
-                                            let price_delta = (order.max_price_per_unit
-                                                - offer.price_per_unit)
-                                                * offer.amount;
-                                            companies[ordering_company].add_currency(price_delta);
-                                            self.statistics.company_orders_partly_fulfilled += 1;
-                                        }
-                                        None => {
-                                            // Order was created by a consumer
-                                            // No company to add resources to and remove currency from
-                                        }
-                                    }
-                                    // Pay out offering company if it exists
-                                    match offer.company {
-                                        Some(offering_company) => {
-                                            companies[offering_company]
-                                                .add_currency(offer.price_per_unit * offer.amount);
-                                            self.statistics.company_offers_fulfilled += 1;
-                                        }
-                                        None => {
-                                            // Offer was created by a producer
-                                            // No company to add currency to
-                                        }
-                                    }
-
-                                    // We consumed the hole amount of the offer and must therefore remove it from the market
-                                    market_data.offers.remove(&offer_handle);
-                                } else {
-                                    // Offer will be partly consumed
-                                    // Order will be finished
-                                    // Check if the order was created by a real company
-                                    match order.company {
-                                        Some(ordering_company) => {
-                                            // Give resources to ordering company
-                                            companies[ordering_company]
-                                                .stock
-                                                .add_resource_to_stock(
-                                                    order.resource,
-                                                    order.amount,
-                                                );
-                                            // Give delta currency from max price back
-                                            let price_delta = (order.max_price_per_unit
-                                                - offer.price_per_unit)
-                                                * order.amount;
-                                            companies[ordering_company].add_currency(price_delta);
-                                            self.statistics.company_orders_fulfilled += 1;
-                                        }
-                                        None => {
-                                            // Order was created by a consumer
-                                            // No company to add resources to and remove currency from
-                                        }
-                                    }
-                                    // Pay out offering company if it exists
-                                    match offer.company {
-                                        Some(offering_company) => {
-                                            companies[offering_company]
-                                                .add_currency(offer.price_per_unit * order.amount);
-                                            self.statistics.company_offers_partly_fulfilled += 1;
-                                        }
-                                        None => {
-                                            // Offer was created by a producer
-                                            // No company to add currency to
-                                        }
-                                    }
-                                    // Reduce offer and order amount
-                                    offer.amount -= order.amount;
-                                    order.amount = 0.0;
-                                }
+            match get_cheapest_offer(order.resource, offers.as_readonly().iter_mut()) {
+                Some((offer, value)) => {
+                    let offer = offers.get_mut(offer).unwrap().1;
+                    if offer.price_per_unit > order.max_price_per_unit {
+                        break;
+                    }
+                    if offer.amount < order.amount {
+                        // Offer will be consumed
+                        // Order will be partly finished
+                        // Consume offer
+                        order.amount -= offer.amount;
+                        // Check if the order was created by a real company
+                        match order.company {
+                            // Order was created by a company
+                            Some(ordering_company) => {
+                                let (mut ordering_stock, mut odering_currency) =
+                                    companies.get_mut(ordering_company).unwrap();
+                                // Give delta currency from max price back
+                                let price_delta = (order.max_price_per_unit - offer.price_per_unit)
+                                    * offer.amount;
+                                odering_currency.0 += price_delta;
+                                // Give resources to ordering company
+                                let amount = ordering_stock
+                                    .resources
+                                    .get(&order.resource)
+                                    .unwrap_or(&0.0)
+                                    + offer.amount;
+                                ordering_stock.resources.insert(order.resource, amount);
                             }
                             None => {
-                                break;
+                                // Order was created by a consumer
+                                // No company to add resources to
                             }
                         }
-                    } else {
-                        break;
                     }
                 }
                 None => {
@@ -225,4 +137,73 @@ fn execute_orders(
         }
     }
 }
+
+/*
+                                // Pay out offering company if it exists
+                                match offer.company {
+                                    Some(offering_company) => {
+                                        companies[offering_company]
+                                            .add_currency(offer.price_per_unit * offer.amount);
+                                        self.statistics.company_offers_fulfilled += 1;
+                                    }
+                                    None => {
+                                        // Offer was created by a producer
+                                        // No company to add currency to
+                                    }
+                                }
+
+                                // We consumed the hole amount of the offer and must therefore remove it from the market
+                                market_data.offers.remove(&offer_handle);
+                            } else {
+                                // Offer will be partly consumed
+                                // Order will be finished
+                                // Check if the order was created by a real company
+                                match order.company {
+                                    Some(ordering_company) => {
+                                        // Give resources to ordering company
+                                        companies[ordering_company]
+                                            .stock
+                                            .add_resource_to_stock(order.resource, order.amount);
+                                        // Give delta currency from max price back
+                                        let price_delta = (order.max_price_per_unit
+                                            - offer.price_per_unit)
+                                            * order.amount;
+                                        companies[ordering_company].add_currency(price_delta);
+                                        self.statistics.company_orders_fulfilled += 1;
+                                    }
+                                    None => {
+                                        // Order was created by a consumer
+                                        // No company to add resources to and remove currency from
+                                    }
+                                }
+                                // Pay out offering company if it exists
+                                match offer.company {
+                                    Some(offering_company) => {
+                                        companies[offering_company]
+                                            .add_currency(offer.price_per_unit * order.amount);
+                                        self.statistics.company_offers_partly_fulfilled += 1;
+                                    }
+                                    None => {
+                                        // Offer was created by a producer
+                                        // No company to add currency to
+                                    }
+                                }
+                                // Reduce offer and order amount
+                                offer.amount -= order.amount;
+                                order.amount = 0.0;
+                            }
+                        }
+                        None => {
+                            break;
+                        }
+                    }
+                }
+                None => {
+                    break;
+                }
+            }
+        }
+    }
+}
+
 */
