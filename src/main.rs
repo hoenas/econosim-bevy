@@ -1,8 +1,13 @@
 use bevy::camera::Camera2d;
+use bevy::prelude::Query;
+use bevy::prelude::Res;
 use bevy::prelude::*;
 use econosim_bevy::components::common::Name;
 use econosim_bevy::components::economy::company::Company;
+use econosim_bevy::components::economy::company::CompanyMarker;
 use econosim_bevy::components::economy::currency::Currency;
+use econosim_bevy::components::economy::offer::{Offer, OfferBundle};
+use econosim_bevy::components::economy::order::{Order, OrderBundle};
 use econosim_bevy::components::economy::processor::Productive;
 use econosim_bevy::components::economy::processor::{Processor, Processors};
 use econosim_bevy::components::economy::production_speed::ProductionSpeed;
@@ -50,7 +55,38 @@ fn create_companies(mut commands: Commands) {
                 }],
             },
             name: Name(format!("Company{}", company)),
+            marker: CompanyMarker::default(),
         },));
+    }
+}
+
+fn create_offers_and_orders(
+    mut commands: Commands,
+    companies: Query<(Entity, Currency)>,
+    resources: Res<Resources>,
+) {
+    let mut rng = rand::rng();
+    for (company, _) in companies {
+        for resource in resources.resources.keys() {
+            commands.spawn(OfferBundle {
+                offer: Offer {
+                    amount: rng.random_range(0.0..1.0) * 100.0,
+                    price_per_unit: rng.random_range(0.0..1.0) * 10.0,
+                    company: Entity,
+                    resource: resource,
+                },
+                time_to_live: 10000,
+            });
+            commands.spawn(OrderBundle {
+                order: Order {
+                    amount: rng.random_range(0.0..1.0) * 100.0,
+                    max_price_per_unit: rng.random_range(0.0..1.0) * 10.0,
+                    company: Entity,
+                    resource: resource,
+                },
+                time_to_live: 10000,
+            });
+        }
     }
 }
 
@@ -77,6 +113,7 @@ fn main() {
                 create_recipes,
                 create_marketplace,
                 create_companies,
+                create_offers_and_orders,
             ),
         )
         // Update companies
