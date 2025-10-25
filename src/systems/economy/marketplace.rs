@@ -2,7 +2,7 @@ use crate::components::economy::currency::Currency;
 use crate::components::economy::offer::Offer;
 use crate::components::economy::order::Order;
 use crate::components::economy::stock::Stock;
-use crate::resources::economy::marketplace::Marketplace;
+use crate::resources::economy::marketplace::{Marketplace, MarketplaceStatistics};
 use crate::resources::economy::resources::{ResourceHandle, Resources};
 use bevy::prelude::Query;
 use bevy::prelude::Res;
@@ -83,6 +83,7 @@ pub fn place_order(order: Order, market_data: &mut MarketData) -> Option<OfferHa
 */
 
 pub fn execute_orders(
+    mut commands: Commands,
     mut orders: Query<&mut Order>,
     mut offers: Query<(Entity, &mut Offer)>,
     mut companies: Query<(&mut Stock, &mut Currency)>,
@@ -94,8 +95,8 @@ pub fn execute_orders(
         // We are trying to fulfill the whole order
         while order.amount > 0.0 {
             match get_cheapest_offer(order.resource, offers.as_readonly().iter_mut()) {
-                Some((offer, value)) => {
-                    let offer = offers.get_mut(offer).unwrap().1;
+                Some((offer_entity, value)) => {
+                    let offer = offers.get_mut(offer_entity).unwrap().1;
                     if offer.price_per_unit > order.max_price_per_unit {
                         break;
                     }
@@ -121,12 +122,28 @@ pub fn execute_orders(
                                     .unwrap_or(&0.0)
                                     + offer.amount;
                                 ordering_stock.resources.insert(order.resource, amount);
+                                market_data.statistics.company_orders_partly_fulfilled += 1;
                             }
                             None => {
                                 // Order was created by a consumer
                                 // No company to add resources to
                             }
                         }
+                        // Pay out offering company if it exists
+                        match offer.company {
+                            Some(offering_company) => {
+                                let (_, mut offering_currency) =
+                                    companies.get_mut(offering_company).unwrap();
+                                offering_currency.0 += offer.price_per_unit * offer.amount;
+                                market_data.statistics.company_offers_fulfilled += 1;
+                            }
+                            None => {
+                                // Offer was created by a producer
+                                // No company to add currency to
+                            }
+                        }
+                        // We consumed the hole amount of the offer and must therefore remove it from the market
+                        commands.entity(offer_entity).despawn();
                     }
                 }
                 None => {
@@ -138,21 +155,7 @@ pub fn execute_orders(
 }
 
 /*
-                                // Pay out offering company if it exists
-                                match offer.company {
-                                    Some(offering_company) => {
-                                        companies[offering_company]
-                                            .add_currency(offer.price_per_unit * offer.amount);
-                                        self.statistics.company_offers_fulfilled += 1;
-                                    }
-                                    None => {
-                                        // Offer was created by a producer
-                                        // No company to add currency to
-                                    }
-                                }
 
-                                // We consumed the hole amount of the offer and must therefore remove it from the market
-                                market_data.offers.remove(&offer_handle);
                             } else {
                                 // Offer will be partly consumed
                                 // Order will be finished
