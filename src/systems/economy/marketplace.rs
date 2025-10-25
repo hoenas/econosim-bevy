@@ -60,7 +60,7 @@ pub fn execute_orders(
     mut market_data: ResMut<Marketplace>,
 ) {
     // Check all orders
-    for (mut order_entity, mut order) in orders.iter_mut() {
+    for (order_entity, mut order) in orders.iter_mut() {
         // We are trying to fulfill the whole order
         while order.amount > 0.0 {
             match get_cheapest_offer(order.resource, offers.as_readonly().iter_mut()) {
