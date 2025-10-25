@@ -6,7 +6,7 @@ use econosim_bevy::components::common::Name;
 use econosim_bevy::components::common::TimeToLive;
 use econosim_bevy::components::economy::company::Company;
 use econosim_bevy::components::economy::company::CompanyMarker;
-use econosim_bevy::components::economy::currency::Currency;
+use econosim_bevy::components::economy::money::Money;
 use econosim_bevy::components::economy::offer::{Offer, OfferBundle};
 use econosim_bevy::components::economy::order::{Order, OrderBundle};
 use econosim_bevy::components::economy::processor::Productive;
@@ -51,7 +51,7 @@ fn create_companies(mut commands: Commands) {
             stock: Stock {
                 resources: resources.clone(),
             },
-            currency: Currency(1000.0),
+            money: Money(1000.0),
             processors: Processors {
                 processors: vec![Processor {
                     production_speed: ProductionSpeed(1.0),
@@ -67,7 +67,7 @@ fn create_companies(mut commands: Commands) {
 
 fn create_offers_and_orders(
     mut commands: Commands,
-    companies: Query<(Entity, &Currency)>,
+    companies: Query<(Entity, &Money)>,
     resources: Res<Resources>,
 ) {
     let mut rng = rand::rng();

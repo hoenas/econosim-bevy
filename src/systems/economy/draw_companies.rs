@@ -1,5 +1,5 @@
 use crate::components::economy::stock::Stock;
-use crate::components::{common::Name, economy::currency::Currency};
+use crate::components::{common::Name, economy::money::Money};
 use crate::resources::economy::resources::Resources;
 use bevy::{prelude::*, sprite::Text2dShadow};
 use itertools::Itertools;
@@ -17,7 +17,7 @@ pub fn clean_company_texts(mut commands: Commands, query: Query<Entity, With<Mar
 
 pub fn draw_companies(
     mut commands: Commands,
-    query: Query<(&Name, &Stock, &Currency)>,
+    query: Query<(&Name, &Stock, &Money)>,
     resources: Res<Resources>,
 ) {
     let text_font = TextFont {
@@ -28,8 +28,8 @@ pub fn draw_companies(
         println!("No companies to draw.");
         return;
     }
-    for (index, (name, stock, currency)) in query.iter().enumerate() {
-        let mut stock_text = format!("{}: Currency: {} ", name.0, currency.0);
+    for (index, (name, stock, money)) in query.iter().enumerate() {
+        let mut stock_text = format!("{}: Money: {} ", name.0, money.0);
         for (resource_id, resource_name) in resources.resources.iter().sorted() {
             let amount = stock.resources.get(&resource_id).cloned().unwrap_or(0.0);
             stock_text.push_str(&format!(" {}: {:.2}", resource_name, amount));

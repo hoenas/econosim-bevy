@@ -1,4 +1,4 @@
-use crate::components::economy::currency::Currency;
+use crate::components::economy::money::Money;
 use crate::components::economy::offer::Offer;
 use crate::components::economy::order::Order;
 use crate::components::economy::stock::Stock;
@@ -56,7 +56,7 @@ pub fn execute_orders(
     mut commands: Commands,
     mut orders: Query<(Entity, &mut Order)>,
     mut offers: Query<(Entity, &mut Offer)>,
-    mut companies: Query<(&mut Stock, &mut Currency)>,
+    mut companies: Query<(&mut Stock, &mut Money)>,
     mut market_data: ResMut<Marketplace>,
 ) {
     // Check all orders
@@ -78,12 +78,12 @@ pub fn execute_orders(
                         match order.company {
                             // Order was created by a company
                             Some(ordering_company) => {
-                                let (mut ordering_stock, mut odering_currency) =
+                                let (mut ordering_stock, mut odering_money) =
                                     companies.get_mut(ordering_company).unwrap();
-                                // Give delta currency from max price back
+                                // Give delta money from max price back
                                 let price_delta = (order.max_price_per_unit - offer.price_per_unit)
                                     * offer.amount;
-                                odering_currency.0 += price_delta;
+                                odering_money.0 += price_delta;
                                 // Give resources to ordering company
                                 let amount = ordering_stock
                                     .resources
@@ -101,14 +101,14 @@ pub fn execute_orders(
                         // Pay out offering company if it exists
                         match offer.company {
                             Some(offering_company) => {
-                                let (_, mut offering_currency) =
+                                let (_, mut offering_money) =
                                     companies.get_mut(offering_company).unwrap();
-                                offering_currency.0 += offer.price_per_unit * offer.amount;
+                                offering_money.0 += offer.price_per_unit * offer.amount;
                                 market_data.statistics.company_offers_fulfilled += 1;
                             }
                             None => {
                                 // Offer was created by a producer
-                                // No company to add currency to
+                                // No company to add money to
                             }
                         }
                         // We consumed the hole amount of the offer and must therefore remove it from the market
@@ -120,7 +120,7 @@ pub fn execute_orders(
                         match order.company {
                             Some(ordering_company_enitity) => {
                                 // Give resources to ordering company
-                                let (mut ordering_company_stock, mut odering_company_currency) =
+                                let (mut ordering_company_stock, mut odering_company_money) =
                                     companies.get_mut(ordering_company_enitity).unwrap();
                                 let resource_amount = ordering_company_stock
                                     .resources
@@ -130,28 +130,28 @@ pub fn execute_orders(
                                 ordering_company_stock
                                     .resources
                                     .insert(order.resource, resource_amount);
-                                // Give delta currency from max price back
+                                // Give delta money from max price back
                                 let price_delta = (order.max_price_per_unit - offer.price_per_unit)
                                     * order.amount;
-                                odering_company_currency.0 += price_delta;
+                                odering_company_money.0 += price_delta;
                                 market_data.statistics.company_orders_fulfilled += 1;
                             }
                             None => {
                                 // Order was created by a consumer
-                                // No company to add resources to and remove currency from
+                                // No company to add resources to and remove money from
                             }
                         }
                         // Pay out offering company if it exists
                         match offer.company {
                             Some(offering_company) => {
-                                let (_, mut offering_currency) =
+                                let (_, mut offering_money) =
                                     companies.get_mut(offering_company).unwrap();
-                                offering_currency.0 += offer.price_per_unit * order.amount;
+                                offering_money.0 += offer.price_per_unit * order.amount;
                                 market_data.statistics.company_offers_partly_fulfilled += 1;
                             }
                             None => {
                                 // Offer was created by a producer
-                                // No company to add currency to
+                                // No company to add money to
                             }
                         }
                         // Reduce offer and order amount

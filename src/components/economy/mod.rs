@@ -1,5 +1,5 @@
 pub mod company;
-pub mod currency;
+pub mod money;
 pub mod offer;
 pub mod order;
 pub mod processor;

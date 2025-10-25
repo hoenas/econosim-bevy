@@ -1,5 +1,5 @@
 use crate::components::common::Name;
-use crate::components::economy::currency::Currency;
+use crate::components::economy::money::Money;
 use crate::components::economy::processor::Processors;
 use crate::components::economy::stock::Stock;
 use bevy::ecs::bundle::Bundle;
@@ -11,7 +11,7 @@ pub struct CompanyMarker();
 #[derive(Bundle)]
 pub struct Company {
     pub stock: Stock,
-    pub currency: Currency,
+    pub money: Money,
     pub processors: Processors,
     pub name: Name,
     pub marker: CompanyMarker,
