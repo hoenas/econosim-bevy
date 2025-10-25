@@ -20,6 +20,9 @@ use econosim_bevy::resources::economy::recipes::Recipes;
 use econosim_bevy::resources::economy::resources::Resources;
 use econosim_bevy::systems::common::update_time_to_live;
 use econosim_bevy::systems::economy::draw_companies::{clean_company_texts, draw_companies};
+use econosim_bevy::systems::economy::draw_marketplace::{
+    clean_marketplace_texts, draw_marketplace,
+};
 use econosim_bevy::systems::economy::marketplace::execute_orders;
 use econosim_bevy::systems::economy::marketplace::{update_order_index, update_price_index};
 use econosim_bevy::systems::economy::processor::update_processors;
@@ -127,5 +130,6 @@ fn main() {
             Update,
             (update_price_index, update_order_index, execute_orders),
         )
+        .add_systems(Update, (clean_marketplace_texts, draw_marketplace))
         .run();
 }
