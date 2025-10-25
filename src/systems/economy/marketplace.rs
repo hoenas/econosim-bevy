@@ -64,7 +64,7 @@ pub fn execute_orders(
         // We are trying to fulfill the whole order
         while order.amount > 0.0 {
             match get_cheapest_offer(order.resource, offers.as_readonly().iter_mut()) {
-                Some((offer_entity)) => {
+                Some(offer_entity) => {
                     let mut offer = offers.get_mut(offer_entity).unwrap().1;
                     if offer.price_per_unit > order.max_price_per_unit {
                         break;
