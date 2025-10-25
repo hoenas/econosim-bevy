@@ -52,36 +52,6 @@ pub fn get_highest_order<'a>(
         .map(|x| x.0)
 }
 
-/*
-pub fn place_offer(offer: Offer, market_data: &mut MarketData) -> Option<OfferHandle> {
-    // Offer sanity checks
-    if offer.amount <= 0.0 || offer.resource >= market_data.resource_count {
-        return None;
-    }
-    if offer.company.is_some() {
-        self.statistics.company_offers_placed += 1;
-    }
-    self.next_offer_id += 1;
-    market_data.offers.insert(self.next_offer_id, offer);
-    self.update_price_index(market_data);
-    Some(self.next_offer_id)
-}
-
-pub fn place_order(order: Order, market_data: &mut MarketData) -> Option<OfferHandle> {
-    // Order sanity checks
-    if order.amount <= 0.0 || order.resource >= market_data.resource_count {
-        return None;
-    }
-    if order.company.is_some() {
-        self.statistics.company_orders_placed += 1;
-    }
-    self.next_order_id += 1;
-    market_data.orders.insert(self.next_order_id, order);
-    self.update_order_index(market_data);
-    Some(self.next_order_id)
-}
-*/
-
 pub fn execute_orders(
     mut commands: Commands,
     mut orders: Query<(Entity, &mut Order)>,
