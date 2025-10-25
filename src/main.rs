@@ -3,6 +3,7 @@ use bevy::prelude::Query;
 use bevy::prelude::Res;
 use bevy::prelude::*;
 use econosim_bevy::components::common::Name;
+use econosim_bevy::components::common::TimeToLive;
 use econosim_bevy::components::economy::company::Company;
 use econosim_bevy::components::economy::company::CompanyMarker;
 use econosim_bevy::components::economy::currency::Currency;
@@ -22,6 +23,7 @@ use econosim_bevy::systems::economy::draw_companies::{clean_company_texts, draw_
 use econosim_bevy::systems::economy::marketplace::execute_orders;
 use econosim_bevy::systems::economy::marketplace::{update_order_index, update_price_index};
 use econosim_bevy::systems::economy::processor::update_processors;
+use rand::prelude::*;
 use std::collections::HashMap;
 
 fn create_resources(mut commands: Commands) {
@@ -62,7 +64,7 @@ fn create_companies(mut commands: Commands) {
 
 fn create_offers_and_orders(
     mut commands: Commands,
-    companies: Query<(Entity, Currency)>,
+    companies: Query<(Entity, &Currency)>,
     resources: Res<Resources>,
 ) {
     let mut rng = rand::rng();
@@ -72,19 +74,19 @@ fn create_offers_and_orders(
                 offer: Offer {
                     amount: rng.random_range(0.0..1.0) * 100.0,
                     price_per_unit: rng.random_range(0.0..1.0) * 10.0,
-                    company: Entity,
-                    resource: resource,
+                    company: Some(company),
+                    resource: *resource,
                 },
-                time_to_live: 10000,
+                time_to_live: TimeToLive(10000),
             });
             commands.spawn(OrderBundle {
                 order: Order {
                     amount: rng.random_range(0.0..1.0) * 100.0,
                     max_price_per_unit: rng.random_range(0.0..1.0) * 10.0,
-                    company: Entity,
-                    resource: resource,
+                    company: Some(company),
+                    resource: *resource,
                 },
-                time_to_live: 10000,
+                time_to_live: TimeToLive(10000),
             });
         }
     }
@@ -110,10 +112,10 @@ fn main() {
             Startup,
             (
                 create_resources,
-                create_recipes,
+                create_recipes.after(create_resources),
                 create_marketplace,
-                create_companies,
-                create_offers_and_orders,
+                create_companies.after(create_recipes),
+                create_offers_and_orders.after(create_companies),
             ),
         )
         // Update companies
