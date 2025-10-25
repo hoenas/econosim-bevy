@@ -15,6 +15,6 @@ pub struct MarketplaceStatistics {
 #[derive(Resource, Default)]
 pub struct Marketplace {
     pub statistics: MarketplaceStatistics,
-    pub price_index: HashMap<ResourceHandle, Option<(Entity, f64)>>,
-    pub order_index: HashMap<ResourceHandle, Option<(Entity, f64)>>,
+    pub price_index: HashMap<ResourceHandle, Option<Entity>>,
+    pub order_index: HashMap<ResourceHandle, Option<Entity>>,
 }
