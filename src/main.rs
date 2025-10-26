@@ -182,6 +182,7 @@ fn main() {
                 create_currency,
                 create_companies.after(create_recipes),
                 create_offers_and_orders.after(create_companies),
+                create_consumers_and_producers,
             ),
         )
         // Update companies
