@@ -15,6 +15,7 @@ use econosim_bevy::components::economy::processor::{Processor, Processors};
 use econosim_bevy::components::economy::production_speed::ProductionSpeed;
 use econosim_bevy::components::economy::recipe::Recipe;
 use econosim_bevy::components::economy::stock::Stock;
+use econosim_bevy::resources::economy::common::Currency;
 use econosim_bevy::resources::economy::common::Id;
 use econosim_bevy::resources::economy::marketplace::Marketplace;
 use econosim_bevy::resources::economy::recipes::Recipes;
@@ -42,6 +43,13 @@ fn create_recipes(mut commands: Commands) {
 
 fn create_marketplace(mut commands: Commands) {
     commands.insert_resource(Marketplace::default());
+}
+
+fn create_currency(mut commands: Commands) {
+    commands.insert_resource(Currency {
+        name: String::from("Euro"),
+        unit: '€',
+    });
 }
 
 fn create_companies(mut commands: Commands) {
@@ -121,6 +129,7 @@ fn main() {
                 create_resources,
                 create_recipes.after(create_resources),
                 create_marketplace,
+                create_currency,
                 create_companies.after(create_recipes),
                 create_offers_and_orders.after(create_companies),
             ),
