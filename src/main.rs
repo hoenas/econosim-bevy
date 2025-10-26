@@ -2,6 +2,8 @@ use bevy::camera::Camera2d;
 use bevy::prelude::Query;
 use bevy::prelude::Res;
 use bevy::prelude::*;
+use bevy_inspector_egui::bevy_egui::EguiPlugin;
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use econosim_bevy::components::common::Name;
 use econosim_bevy::components::common::RenderColor;
 use econosim_bevy::components::common::TimeToLive;
@@ -65,7 +67,7 @@ fn create_companies(mut commands: Commands) {
     resources.insert(1, 10000.0);
     resources.insert(2, 10000.0);
     for company in 0..3 {
-        commands.spawn((Company {
+        commands.spawn(Company {
             stock: Stock {
                 resources: resources.clone(),
             },
@@ -80,7 +82,7 @@ fn create_companies(mut commands: Commands) {
             name: Name(format!("Company{}", company)),
             marker: CompanyMarker::default(),
             color: RenderColor::default(),
-        },));
+        });
     }
 }
 
@@ -118,10 +120,10 @@ fn create_consumers_and_producers(mut commands: Commands) {
     commands.spawn(Producer {
         name: Name(String::from("Water Procucer")),
         config: ProducerConfig {
-            resource: 2,
+            resource: 0,
             offer_amount: 10000.0,
             offer_price: 1.0,
-            ticks_between_offers: 1000,
+            ticks_between_offers: 100,
             ticks_since_last_offer: 0,
         },
     });
@@ -131,17 +133,17 @@ fn create_consumers_and_producers(mut commands: Commands) {
             resource: 1,
             offer_amount: 10000.0,
             offer_price: 0.5,
-            ticks_between_offers: 1000,
+            ticks_between_offers: 100,
             ticks_since_last_offer: 0,
         },
     });
     commands.spawn(Producer {
         name: Name(String::from("Wood Procucer")),
         config: ProducerConfig {
-            resource: 0,
+            resource: 2,
             offer_amount: 10000.0,
             offer_price: 2.0,
-            ticks_between_offers: 1000,
+            ticks_between_offers: 100,
             ticks_since_last_offer: 0,
         },
     });
@@ -149,9 +151,9 @@ fn create_consumers_and_producers(mut commands: Commands) {
         name: Name(String::from("Coal Consumer")),
         config: ConsumerConfig {
             resource: 3,
-            order_amount: 1000.0,
+            order_amount: 10000.0,
             order_max_price: 10.0,
-            ticks_between_orders: 1000,
+            ticks_between_orders: 100,
             ticks_since_last_order: 0,
         },
     });
@@ -172,6 +174,8 @@ fn setup_camera(mut commands: Commands) {
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugins(EguiPlugin::default())
+        .add_plugins(WorldInspectorPlugin::new())
         .add_systems(Startup, setup_camera)
         .add_systems(
             Startup,
@@ -181,8 +185,8 @@ fn main() {
                 create_marketplace,
                 create_currency,
                 create_companies.after(create_recipes),
-                create_offers_and_orders.after(create_companies),
-                create_consumers_and_producers,
+                // create_offers_and_orders.after(create_companies),
+                create_consumers_and_producers.after(create_recipes),
             ),
         )
         // Update companies

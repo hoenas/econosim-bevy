@@ -1,4 +1,5 @@
 use crate::components::common::Name;
+use bevy::ecs::bundle::Bundle;
 use bevy::prelude::Component;
 
 #[derive(Component)]
@@ -10,7 +11,7 @@ pub struct ConsumerConfig {
     pub ticks_since_last_order: usize,
 }
 
-#[derive(Component)]
+#[derive(Bundle)]
 pub struct Consumer {
     pub name: Name,
     pub config: ConsumerConfig,

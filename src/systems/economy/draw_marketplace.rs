@@ -1,6 +1,8 @@
+use crate::components::economy::offer::Offer;
+use crate::components::economy::order::Order;
 use crate::resources::economy::marketplace::Marketplace;
+use crate::resources::economy::resources::Resources;
 use bevy::{prelude::*, sprite::Text2dShadow};
-use itertools::Itertools;
 
 use bevy::prelude::Component;
 
@@ -16,7 +18,13 @@ pub fn clean_marketplace_texts(
     }
 }
 
-pub fn draw_marketplace(mut commands: Commands, marketplace: Res<Marketplace>) {
+pub fn draw_marketplace(
+    mut commands: Commands,
+    marketplace: Res<Marketplace>,
+    resources: Res<Resources>,
+    orders: Query<&Order>,
+    offers: Query<&Offer>,
+) {
     let text_font = TextFont {
         font_size: 14.0,
         ..default()
@@ -46,7 +54,32 @@ pub fn draw_marketplace(mut commands: Commands, marketplace: Res<Marketplace>) {
         "Offers fulfilled:        {}\n",
         marketplace.statistics.company_offers_fulfilled
     ));
-
+    marketplace_text.push_str(&format!(
+        "Open orders:             {}\n",
+        orders.iter().len()
+    ));
+    marketplace_text.push_str(&format!(
+        "Open offers:             {}\n",
+        offers.iter().len()
+    ));
+    marketplace_text.push_str("Price index:\n");
+    for (resource_id, order_price_tuple) in marketplace.price_index.iter() {
+        let mut resource_price = 0.0;
+        if order_price_tuple.is_some() {
+            resource_price = order_price_tuple.unwrap().1;
+        }
+        let resource_name = resources.resources.get(resource_id).unwrap();
+        marketplace_text.push_str(&format!(" - {}: {}\n", resource_name, resource_price));
+    }
+    marketplace_text.push_str("Order index:\n");
+    for (resource_id, order_price_tuple) in marketplace.order_index.iter() {
+        let mut resource_price = 0.0;
+        if order_price_tuple.is_some() {
+            resource_price = order_price_tuple.unwrap().1;
+        }
+        let resource_name = resources.resources.get(resource_id).unwrap();
+        marketplace_text.push_str(&format!(" - {}: {}\n", resource_name, resource_price));
+    }
     commands.spawn((
         Text2d::new(marketplace_text),
         text_font.clone(),

@@ -35,21 +35,21 @@ pub fn update_order_index(
 pub fn get_cheapest_offer<'a>(
     resource: ResourceHandle,
     offers: impl Iterator<Item = (Entity, &'a Offer)>,
-) -> Option<Entity> {
+) -> Option<(Entity, f64)> {
     offers
         .filter(|(_, order)| order.resource == resource)
         .max_by_key(|x| OrderedFloat(x.1.price_per_unit))
-        .map(|x| x.0)
+        .map(|x| (x.0, x.1.price_per_unit))
 }
 
 pub fn get_highest_order<'a>(
     resource: ResourceHandle,
     orders: impl Iterator<Item = (Entity, &'a Order)>,
-) -> Option<Entity> {
+) -> Option<(Entity, f64)> {
     orders
         .filter(|(_, order)| order.resource == resource)
         .max_by_key(|x| OrderedFloat(x.1.max_price_per_unit))
-        .map(|x| x.0)
+        .map(|x| (x.0, x.1.max_price_per_unit))
 }
 
 pub fn execute_orders(
@@ -64,7 +64,7 @@ pub fn execute_orders(
         // We are trying to fulfill the whole order
         while order.amount > 0.0 {
             match get_cheapest_offer(order.resource, offers.as_readonly().iter_mut()) {
-                Some(offer_entity) => {
+                Some((offer_entity, _)) => {
                     let mut offer = offers.get_mut(offer_entity).unwrap().1;
                     if offer.price_per_unit > order.max_price_per_unit {
                         break;

@@ -4,7 +4,7 @@ use crate::components::{common::Name, economy::money::Money};
 use crate::resources::economy::common::Currency;
 use crate::resources::economy::resources::Resources;
 use bevy::{prelude::*, sprite::Text2dShadow};
-use itertools::{Itertools, Position};
+use itertools::Itertools;
 
 use bevy::prelude::Component;
 
@@ -43,7 +43,7 @@ pub fn draw_companies(
             TextColor(color.0),
             text_font.clone(),
             TextLayout::new_with_justify(Justify::Left),
-            Transform::from_translation(Vec3::new(0.0, 20.0 * (index as f32), 0.0)),
+            Transform::from_translation(Vec3::new(0.0, 200.0 - 20.0 * (index as f32), 0.0)),
             TextBackgroundColor(Color::BLACK.with_alpha(0.5)),
             Text2dShadow::default(),
             MarkerStockText::default(),
