@@ -7,11 +7,15 @@ use econosim_bevy::components::common::RenderColor;
 use econosim_bevy::components::common::TimeToLive;
 use econosim_bevy::components::economy::company::Company;
 use econosim_bevy::components::economy::company::CompanyMarker;
+use econosim_bevy::components::economy::consumer::Consumer;
+use econosim_bevy::components::economy::consumer::ConsumerConfig;
 use econosim_bevy::components::economy::money::Money;
 use econosim_bevy::components::economy::offer::{Offer, OfferBundle};
 use econosim_bevy::components::economy::order::{Order, OrderBundle};
 use econosim_bevy::components::economy::processor::Productive;
 use econosim_bevy::components::economy::processor::{Processor, Processors};
+use econosim_bevy::components::economy::producer::Producer;
+use econosim_bevy::components::economy::producer::ProducerConfig;
 use econosim_bevy::components::economy::production_speed::ProductionSpeed;
 use econosim_bevy::components::economy::recipe::Recipe;
 use econosim_bevy::components::economy::stock::Stock;
@@ -21,9 +25,12 @@ use econosim_bevy::resources::economy::marketplace::Marketplace;
 use econosim_bevy::resources::economy::recipes::Recipes;
 use econosim_bevy::resources::economy::resources::Resources;
 use econosim_bevy::systems::common::update_time_to_live;
+use econosim_bevy::systems::economy::consumer::manage_consumers;
 use econosim_bevy::systems::economy::draw_companies::{
     clean_company_texts, draw_companies, draw_plot,
 };
+use econosim_bevy::systems::economy::producer::manage_producers;
+
 use econosim_bevy::systems::economy::draw_marketplace::{
     clean_marketplace_texts, draw_marketplace,
 };
@@ -107,6 +114,49 @@ fn create_offers_and_orders(
     }
 }
 
+fn create_consumers_and_producers(mut commands: Commands) {
+    commands.spawn(Producer {
+        name: Name(String::from("Water Procucer")),
+        config: ProducerConfig {
+            resource: 2,
+            offer_amount: 10000.0,
+            offer_price: 1.0,
+            ticks_between_offers: 1000,
+            ticks_since_last_offer: 0,
+        },
+    });
+    commands.spawn(Producer {
+        name: Name(String::from("Dirt Procucer")),
+        config: ProducerConfig {
+            resource: 1,
+            offer_amount: 10000.0,
+            offer_price: 0.5,
+            ticks_between_offers: 1000,
+            ticks_since_last_offer: 0,
+        },
+    });
+    commands.spawn(Producer {
+        name: Name(String::from("Wood Procucer")),
+        config: ProducerConfig {
+            resource: 0,
+            offer_amount: 10000.0,
+            offer_price: 2.0,
+            ticks_between_offers: 1000,
+            ticks_since_last_offer: 0,
+        },
+    });
+    commands.spawn(Consumer {
+        name: Name(String::from("Coal Consumer")),
+        config: ConsumerConfig {
+            resource: 3,
+            order_amount: 1000.0,
+            order_max_price: 10.0,
+            ticks_between_orders: 1000,
+            ticks_since_last_order: 0,
+        },
+    });
+}
+
 #[derive(Component)]
 struct MyCameraMarker;
 
@@ -136,7 +186,10 @@ fn main() {
         )
         // Update companies
         .add_systems(Update, update_processors)
-        .add_systems(Update, (clean_company_texts, draw_companies, draw_plot))
+        .add_systems(Update, (clean_company_texts, draw_companies))
+        // .add_systems(Update, draw_plot)
+        // Manage consumers & producers
+        .add_systems(Update, (manage_consumers, manage_producers))
         // Update market
         .add_systems(Update, update_time_to_live)
         .add_systems(

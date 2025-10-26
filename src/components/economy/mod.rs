@@ -1,8 +1,10 @@
 pub mod company;
+pub mod consumer;
 pub mod money;
 pub mod offer;
 pub mod order;
 pub mod processor;
+pub mod producer;
 pub mod production_speed;
 pub mod recipe;
 pub mod resource;
