@@ -1,3 +1,4 @@
+use crate::components::common::RenderColor;
 use crate::components::economy::stock::Stock;
 use crate::components::{common::Name, economy::money::Money};
 use crate::resources::economy::resources::Resources;
@@ -17,7 +18,7 @@ pub fn clean_company_texts(mut commands: Commands, query: Query<Entity, With<Mar
 
 pub fn draw_companies(
     mut commands: Commands,
-    query: Query<(&Name, &Stock, &Money)>,
+    query: Query<(&Name, &Stock, &Money, &RenderColor)>,
     resources: Res<Resources>,
 ) {
     let text_font = TextFont {
@@ -28,7 +29,7 @@ pub fn draw_companies(
         println!("No companies to draw.");
         return;
     }
-    for (index, (name, stock, money)) in query.iter().enumerate() {
+    for (index, (name, stock, money, color)) in query.iter().enumerate() {
         let mut stock_text = format!("{}: Money: {} ", name.0, money.0);
         for (resource_id, resource_name) in resources.resources.iter().sorted() {
             let amount = stock.resources.get(&resource_id).cloned().unwrap_or(0.0);
@@ -37,6 +38,7 @@ pub fn draw_companies(
 
         commands.spawn((
             Text2d::new(stock_text),
+            TextColor(color.0),
             text_font.clone(),
             TextLayout::new_with_justify(Justify::Left),
             Transform::from_translation(Vec3::new(0.0, 20.0 * (index as f32), 0.0)),

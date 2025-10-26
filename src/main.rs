@@ -3,6 +3,7 @@ use bevy::prelude::Query;
 use bevy::prelude::Res;
 use bevy::prelude::*;
 use econosim_bevy::components::common::Name;
+use econosim_bevy::components::common::RenderColor;
 use econosim_bevy::components::common::TimeToLive;
 use econosim_bevy::components::economy::company::Company;
 use econosim_bevy::components::economy::company::CompanyMarker;
@@ -61,6 +62,7 @@ fn create_companies(mut commands: Commands) {
             },
             name: Name(format!("Company{}", company)),
             marker: CompanyMarker::default(),
+            color: RenderColor::default(),
         },));
     }
 }

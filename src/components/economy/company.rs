@@ -1,4 +1,5 @@
 use crate::components::common::Name;
+use crate::components::common::RenderColor;
 use crate::components::economy::money::Money;
 use crate::components::economy::processor::Processors;
 use crate::components::economy::stock::Stock;
@@ -14,5 +15,6 @@ pub struct Company {
     pub money: Money,
     pub processors: Processors,
     pub name: Name,
+    pub color: RenderColor,
     pub marker: CompanyMarker,
 }
