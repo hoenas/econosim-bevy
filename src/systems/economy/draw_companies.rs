@@ -3,7 +3,7 @@ use crate::components::economy::stock::Stock;
 use crate::components::{common::Name, economy::money::Money};
 use crate::resources::economy::resources::Resources;
 use bevy::{prelude::*, sprite::Text2dShadow};
-use itertools::Itertools;
+use itertools::{Itertools, Position};
 
 use bevy::prelude::Component;
 
@@ -46,5 +46,34 @@ pub fn draw_companies(
             Text2dShadow::default(),
             MarkerStockText::default(),
         ));
+    }
+}
+
+pub fn draw_plot(
+    mut commands: Commands,
+    query: Query<(&Name, &Stock, &RenderColor)>,
+    time: Res<Time>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    resources: Res<Resources>,
+) {
+    let bounds = Rectangle::new(800.0, 400.0);
+    let origin_x = bounds.size().x / -2.0;
+    let origin_y = bounds.size().y / -2.0;
+
+    let time_since_start = time.elapsed().as_secs_f32();
+
+    for (_, stock, color) in query.iter() {
+        for (resource, _) in resources.resources.iter() {
+            commands.spawn((
+                Mesh2d(meshes.add(Circle::new(1.0))),
+                MeshMaterial2d(materials.add(color.0)),
+                Transform::from_xyz(
+                    origin_x + bounds.size().x * time_since_start / 50.0,
+                    origin_y + *stock.resources.get(&resource).unwrap_or(&0.0) as f32 / 100.0,
+                    0.0,
+                ),
+            ));
+        }
     }
 }

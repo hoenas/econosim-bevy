@@ -20,7 +20,9 @@ use econosim_bevy::resources::economy::marketplace::Marketplace;
 use econosim_bevy::resources::economy::recipes::Recipes;
 use econosim_bevy::resources::economy::resources::Resources;
 use econosim_bevy::systems::common::update_time_to_live;
-use econosim_bevy::systems::economy::draw_companies::{clean_company_texts, draw_companies};
+use econosim_bevy::systems::economy::draw_companies::{
+    clean_company_texts, draw_companies, draw_plot,
+};
 use econosim_bevy::systems::economy::draw_marketplace::{
     clean_marketplace_texts, draw_marketplace,
 };
@@ -86,7 +88,7 @@ fn create_offers_and_orders(
             });
             commands.spawn(OrderBundle {
                 order: Order {
-                    amount: rng.random_range(0.0..1.0) * 100.0,
+                    amount: rng.random_range(0.0..1.0) * 10000.0,
                     max_price_per_unit: rng.random_range(0.0..1.0) * 10.0,
                     company: Some(company),
                     resource: *resource,
@@ -125,7 +127,7 @@ fn main() {
         )
         // Update companies
         .add_systems(Update, update_processors)
-        .add_systems(Update, (clean_company_texts, draw_companies))
+        .add_systems(Update, (clean_company_texts, draw_companies, draw_plot))
         // Update market
         .add_systems(Update, update_time_to_live)
         .add_systems(
