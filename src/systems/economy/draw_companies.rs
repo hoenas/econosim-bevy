@@ -30,7 +30,7 @@ pub fn draw_companies(
         return;
     }
     for (index, (name, stock, money, color)) in query.iter().enumerate() {
-        let mut stock_text = format!("{}: Money: {} ", name.0, money.0);
+        let mut stock_text = format!("{}: Money: {:.2} ", name.0, money.0);
         for (resource_id, resource_name) in resources.resources.iter().sorted() {
             let amount = stock.resources.get(&resource_id).cloned().unwrap_or(0.0);
             stock_text.push_str(&format!(" {}: {:.2}", resource_name, amount));
