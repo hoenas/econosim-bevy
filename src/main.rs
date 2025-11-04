@@ -2,6 +2,9 @@ use bevy::camera::Camera2d;
 use bevy::prelude::Query;
 use bevy::prelude::Res;
 use bevy::prelude::*;
+use bevy_egui::EguiContexts;
+use bevy_egui::EguiPrimaryContextPass;
+use bevy_egui::egui;
 use bevy_inspector_egui::bevy_egui::EguiPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use econosim_bevy::components::common::Name;
@@ -175,7 +178,8 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(EguiPlugin::default())
-        .add_plugins(WorldInspectorPlugin::new())
+        // .add_plugins(WorldInspectorPlugin::new())
+        .add_systems(EguiPrimaryContextPass, graph_ui_system)
         .add_systems(Startup, setup_camera)
         .add_systems(
             Startup,
