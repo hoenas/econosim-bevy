@@ -33,6 +33,7 @@ use econosim_bevy::systems::common::update_time_to_live;
 use econosim_bevy::systems::economy::consumer::manage_consumers;
 use econosim_bevy::systems::economy::draw_companies::{clean_company_texts, draw_companies};
 use econosim_bevy::systems::economy::producer::manage_producers;
+use econosim_bevy::systems::ui::statistics::graph_system as graph_ui_system;
 
 use econosim_bevy::systems::economy::draw_marketplace::{
     clean_marketplace_texts, draw_marketplace,
