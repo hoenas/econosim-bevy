@@ -2,11 +2,8 @@ use bevy::camera::Camera2d;
 use bevy::prelude::Query;
 use bevy::prelude::Res;
 use bevy::prelude::*;
-use bevy_egui::EguiContexts;
 use bevy_egui::EguiPrimaryContextPass;
-use bevy_egui::egui;
 use bevy_inspector_egui::bevy_egui::EguiPlugin;
-use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use econosim_bevy::components::common::Name;
 use econosim_bevy::components::common::RenderColor;
 use econosim_bevy::components::common::TimeToLive;
@@ -166,7 +163,7 @@ struct MyCameraMarker;
 
 fn setup_camera(mut commands: Commands) {
     commands.spawn((
-        Camera2d::default(),
+        Camera2d,
         MyCameraMarker,
         Transform::from_xyz(0.0, 0.0, 1000.0),
         GlobalTransform::default(),
