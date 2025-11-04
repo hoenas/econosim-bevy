@@ -30,12 +30,12 @@ impl Default for Recipes {
             0,
             Recipe {
                 name: "Coal".to_string(),
-                ingredients: ingredients,
-                products: products,
+                ingredients,
+                products,
                 production_speed: 1.0,
             },
         );
 
-        Recipes { recipes: recipes }
+        Recipes { recipes }
     }
 }

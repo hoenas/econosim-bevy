@@ -17,7 +17,7 @@ impl Default for Resources {
         resources.insert(2, "Wood".to_string());
         resources.insert(3, "Coal".to_string());
         Resources {
-            resources: resources,
+            resources,
         }
     }
 }

@@ -31,9 +31,7 @@ use econosim_bevy::resources::economy::recipes::Recipes;
 use econosim_bevy::resources::economy::resources::Resources;
 use econosim_bevy::systems::common::update_time_to_live;
 use econosim_bevy::systems::economy::consumer::manage_consumers;
-use econosim_bevy::systems::economy::draw_companies::{
-    clean_company_texts, draw_companies, draw_plot,
-};
+use econosim_bevy::systems::economy::draw_companies::{clean_company_texts, draw_companies};
 use econosim_bevy::systems::economy::producer::manage_producers;
 
 use econosim_bevy::systems::economy::draw_marketplace::{

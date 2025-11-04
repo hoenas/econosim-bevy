@@ -34,7 +34,7 @@ pub fn draw_companies(
     for (index, (name, stock, money, color)) in query.iter().enumerate() {
         let mut stock_text = format!("{}: Money: {:.2}{} ", name.0, money.0, currency.name);
         for (resource_id, resource_name) in resources.resources.iter().sorted() {
-            let amount = stock.resources.get(&resource_id).cloned().unwrap_or(0.0);
+            let amount = stock.resources.get(resource_id).cloned().unwrap_or(0.0);
             stock_text.push_str(&format!(" {}: {:.2}", resource_name, amount));
         }
 
@@ -72,7 +72,7 @@ pub fn draw_plot(
                 MeshMaterial2d(materials.add(color.0)),
                 Transform::from_xyz(
                     origin_x + bounds.size().x * time_since_start / 50.0,
-                    origin_y + *stock.resources.get(&resource).unwrap_or(&0.0) as f32 / 100.0,
+                    origin_y + *stock.resources.get(resource).unwrap_or(&0.0) as f32 / 100.0,
                     0.0,
                 ),
             ));
