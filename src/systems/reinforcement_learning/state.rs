@@ -1,18 +1,18 @@
 use burn::prelude::*;
 
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(PartialEq, Clone)]
 pub struct CompanyState {
     // Stockpile
-    pub stock: Vec<usize>,
+    pub stock: Vec<f64>,
     // Currentcy
-    pub money: usize,
+    pub money: f64,
     // Price and order index
-    pub price_index: Vec<usize>,
-    pub order_index: Vec<usize>,
+    pub price_index: Vec<f64>,
+    pub order_index: Vec<f64>,
     // Processor counts
-    pub processor_counts: Vec<usize>,
+    pub processor_counts: Vec<f64>,
     // Production rates
-    pub production_rates: Vec<usize>,
+    pub production_rates: Vec<f64>,
 }
 
 impl CompanyState {}
@@ -20,30 +20,23 @@ impl CompanyState {}
 impl CompanyState {
     pub fn new(resource_count: usize, recipe_count: usize) -> CompanyState {
         CompanyState {
-            stock: vec![0; resource_count],
-            money: 0,
-            price_index: vec![0; resource_count],
-            order_index: vec![0; resource_count],
-            processor_counts: vec![0; recipe_count],
-            production_rates: vec![0; resource_count],
+            stock: vec![0.0; resource_count],
+            money: 0.0,
+            price_index: vec![0.0; resource_count],
+            order_index: vec![0.0; resource_count],
+            processor_counts: vec![0.0; recipe_count],
+            production_rates: vec![0.0; resource_count],
         }
     }
 
     pub fn as_tensor<B: Backend>(&self) -> Tensor<B, 1> {
         let mut values: Vec<f64> = vec![];
-        let mut stock_vec: Vec<f64> = self.stock.iter().map(|x| *x as f64).collect();
-        values.append(&mut stock_vec);
+        values.append(&mut self.stock.clone());
         values.push(self.money as f64);
-        let mut price_index_vec: Vec<f64> = self.price_index.iter().map(|x| *x as f64).collect();
-        values.append(&mut price_index_vec);
-        let mut order_index_vec: Vec<f64> = self.order_index.iter().map(|x| *x as f64).collect();
-        values.append(&mut order_index_vec);
-        let mut processor_counts_vec: Vec<f64> =
-            self.processor_counts.iter().map(|x| *x as f64).collect();
-        values.append(&mut processor_counts_vec);
-        let mut production_rates_vec: Vec<f64> =
-            self.production_rates.iter().map(|x| *x as f64).collect();
-        values.append(&mut production_rates_vec);
+        values.append(&mut self.price_index.clone());
+        values.append(&mut self.order_index.clone());
+        values.append(&mut self.processor_counts.clone());
+        values.append(&mut self.production_rates.clone());
         Tensor::from_data(values.as_slice(), &Default::default())
     }
 }
