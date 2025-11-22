@@ -1,3 +1,5 @@
+use bevy::prelude::Resource;
+
 #[derive(PartialEq, Eq, Hash, Clone)]
 pub enum CompanyAction {
     Nothing,
@@ -7,7 +9,7 @@ pub enum CompanyAction {
     SellResource(usize, usize),
 }
 
-#[derive(Clone)]
+#[derive(Resource, Default)]
 pub struct ActionSpace {
     pub actions: Vec<CompanyAction>,
 }
