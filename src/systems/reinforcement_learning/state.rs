@@ -5,7 +5,7 @@ pub struct CompanyState {
     // Stockpile
     pub stock: Vec<usize>,
     // Currentcy
-    pub currency: usize,
+    pub money: usize,
     // Price and order index
     pub price_index: Vec<usize>,
     pub order_index: Vec<usize>,
@@ -21,7 +21,7 @@ impl CompanyState {
     pub fn new(resource_count: usize, recipe_count: usize) -> CompanyState {
         CompanyState {
             stock: vec![0; resource_count],
-            currency: 0,
+            money: 0,
             price_index: vec![0; resource_count],
             order_index: vec![0; resource_count],
             processor_counts: vec![0; recipe_count],
@@ -33,7 +33,7 @@ impl CompanyState {
         let mut values: Vec<f64> = vec![];
         let mut stock_vec: Vec<f64> = self.stock.iter().map(|x| *x as f64).collect();
         values.append(&mut stock_vec);
-        values.push(self.currency as f64);
+        values.push(self.money as f64);
         let mut price_index_vec: Vec<f64> = self.price_index.iter().map(|x| *x as f64).collect();
         values.append(&mut price_index_vec);
         let mut order_index_vec: Vec<f64> = self.order_index.iter().map(|x| *x as f64).collect();
