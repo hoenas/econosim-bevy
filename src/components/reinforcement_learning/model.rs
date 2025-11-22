@@ -1,3 +1,4 @@
+use bevy::prelude::Component;
 use burn::Tensor;
 use burn::module::Module;
 use burn::nn::loss::HuberLossConfig;
@@ -8,7 +9,7 @@ use burn::tensor::backend::AutodiffBackend;
 // Source: https://dev.to/philip_yaw/burn-the-future-of-deep-learning-in-rust-5c5e
 
 // Define a simple feedforward neural network
-#[derive(Module, Debug)]
+#[derive(Module, Debug, Component)]
 pub struct NeuralNetwork<B: Backend> {
     linear1: Linear<B>,
     linear2: Linear<B>,

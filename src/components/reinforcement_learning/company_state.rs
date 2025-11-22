@@ -1,6 +1,7 @@
+use bevy::ecs::component::Component;
 use burn::prelude::*;
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Component)]
 pub struct CompanyState {
     // Stockpile
     pub stock: Vec<f64>,
