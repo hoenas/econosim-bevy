@@ -11,8 +11,6 @@ pub struct CompanyState {
     pub order_index: Vec<f64>,
     // Processor counts
     pub processor_counts: Vec<f64>,
-    // Production rates
-    pub production_rates: Vec<f64>,
 }
 
 impl CompanyState {}
@@ -25,7 +23,6 @@ impl CompanyState {
             price_index: vec![0.0; resource_count],
             order_index: vec![0.0; resource_count],
             processor_counts: vec![0.0; recipe_count],
-            production_rates: vec![0.0; resource_count],
         }
     }
 
@@ -36,7 +33,6 @@ impl CompanyState {
         values.append(&mut self.price_index.clone());
         values.append(&mut self.order_index.clone());
         values.append(&mut self.processor_counts.clone());
-        values.append(&mut self.production_rates.clone());
         Tensor::from_data(values.as_slice(), &Default::default())
     }
 }
