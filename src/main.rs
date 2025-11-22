@@ -11,6 +11,7 @@ use econosim_bevy::components::economy::company::Company;
 use econosim_bevy::components::economy::company::CompanyMarker;
 use econosim_bevy::components::economy::consumer::Consumer;
 use econosim_bevy::components::economy::consumer::ConsumerConfig;
+use econosim_bevy::components::economy::money::LastTickMoney;
 use econosim_bevy::components::economy::money::Money;
 use econosim_bevy::components::economy::offer::{Offer, OfferBundle};
 use econosim_bevy::components::economy::order::{Order, OrderBundle};
@@ -71,6 +72,7 @@ fn create_companies(mut commands: Commands) {
                 resources: resources.clone(),
             },
             money: Money(1000.0),
+            last_tick_money: LastTickMoney(1000.0),
             processors: Processors {
                 processors: vec![Processor {
                     production_speed: ProductionSpeed(1.0),
