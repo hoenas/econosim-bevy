@@ -1,3 +1,4 @@
+#![recursion_limit = "512"]
 use bevy::camera::Camera2d;
 use bevy::prelude::Query;
 use bevy::prelude::Res;
@@ -22,6 +23,8 @@ use econosim_bevy::components::economy::producer::ProducerConfig;
 use econosim_bevy::components::economy::production_speed::ProductionSpeed;
 use econosim_bevy::components::economy::recipe::Recipe;
 use econosim_bevy::components::economy::stock::Stock;
+use econosim_bevy::components::reinforcement_learning::action::CompanyAction;
+use econosim_bevy::components::reinforcement_learning::company_state::CompanyState;
 use econosim_bevy::resources::economy::common::Currency;
 use econosim_bevy::resources::economy::common::Id;
 use econosim_bevy::resources::economy::marketplace::Marketplace;
@@ -61,18 +64,21 @@ fn create_currency(mut commands: Commands) {
     });
 }
 
-fn create_companies(mut commands: Commands) {
-    let mut resources: HashMap<Id, f64> = HashMap::new();
-    resources.insert(0, 10000.0);
-    resources.insert(1, 10000.0);
-    resources.insert(2, 10000.0);
+fn create_companies(mut commands: Commands, resources: Res<Resources>, recipes: Res<Recipes>) {
+    let mut stock_resources: HashMap<Id, f64> = HashMap::new();
+    for (resource, _) in resources.resources.iter() {
+        stock_resources.insert(*resource, 10000.0);
+    }
+
     for company in 0..3 {
         commands.spawn(Company {
             stock: Stock {
-                resources: resources.clone(),
+                resources: stock_resources.clone(),
             },
             money: Money(1000.0),
             last_tick_money: LastTickMoney(1000.0),
+            last_state: CompanyState::new(resources.resources.len(), recipes.recipes.len()),
+            last_action: CompanyAction(0),
             processors: Processors {
                 processors: vec![Processor {
                     production_speed: ProductionSpeed(1.0),

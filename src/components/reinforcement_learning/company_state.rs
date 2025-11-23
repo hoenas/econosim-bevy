@@ -14,8 +14,6 @@ pub struct CompanyState {
     pub processor_counts: Vec<f64>,
 }
 
-impl CompanyState {}
-
 impl CompanyState {
     pub fn new(resource_count: usize, recipe_count: usize) -> CompanyState {
         CompanyState {
@@ -35,5 +33,9 @@ impl CompanyState {
         values.append(&mut self.order_index.clone());
         values.append(&mut self.processor_counts.clone());
         Tensor::from_data(values.as_slice(), &Default::default())
+    }
+
+    pub fn get_size(&self, resource_count: usize, recipe_count: usize) -> usize {
+        1 + 3 * resource_count + recipe_count
     }
 }

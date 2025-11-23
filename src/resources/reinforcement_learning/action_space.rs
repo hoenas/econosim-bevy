@@ -1,7 +1,7 @@
 use bevy::prelude::Resource;
 
 #[derive(PartialEq, Eq, Hash, Clone)]
-pub enum CompanyAction {
+pub enum CompanyActionEnum {
     Nothing,
     BuyProcessor(usize),
     SellProcessor(usize),
@@ -11,23 +11,23 @@ pub enum CompanyAction {
 
 #[derive(Resource, Default)]
 pub struct ActionSpace {
-    pub actions: Vec<CompanyAction>,
+    pub actions: Vec<CompanyActionEnum>,
 }
 
 impl ActionSpace {
     pub fn new(resource_count: usize, recipe_count: usize) -> ActionSpace {
-        let mut actionspace: Vec<CompanyAction> = Vec::new();
-        actionspace.push(CompanyAction::Nothing);
+        let mut actionspace: Vec<CompanyActionEnum> = Vec::new();
+        actionspace.push(CompanyActionEnum::Nothing);
         for i in 0..recipe_count {
-            actionspace.push(CompanyAction::BuyProcessor(i));
+            actionspace.push(CompanyActionEnum::BuyProcessor(i));
         }
         for i in 0..recipe_count {
-            actionspace.push(CompanyAction::SellProcessor(i));
+            actionspace.push(CompanyActionEnum::SellProcessor(i));
         }
         // TODO: Allow creation of offers / orders that are not according to best price policy
         for i in 0..resource_count {
-            actionspace.push(CompanyAction::BuyResource(i, 1));
-            actionspace.push(CompanyAction::SellResource(i, 1));
+            actionspace.push(CompanyActionEnum::BuyResource(i, 1));
+            actionspace.push(CompanyActionEnum::SellResource(i, 1));
         }
         ActionSpace {
             actions: actionspace,

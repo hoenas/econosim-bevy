@@ -1,24 +1,36 @@
 use crate::components::economy::money::LastTickMoney;
 use crate::components::economy::processor::Processors;
 use crate::components::economy::stock::Stock;
+use crate::components::reinforcement_learning::action::CompanyAction;
+use crate::components::reinforcement_learning::company_state::CompanyState;
 use crate::components::{common::Name, economy::money::Money};
 use crate::resources::economy::marketplace::Marketplace;
 use crate::resources::economy::recipes::Recipes;
 use crate::resources::economy::resources::Resources;
-use crate::resources::reinforcement_learning::action_space::{ActionSpace, CompanyAction};
-use crate::systems::reinforcement_learning::state::CompanyState;
+use crate::resources::reinforcement_learning::action_space::{ActionSpace, CompanyActionEnum};
+use crate::resources::reinforcement_learning::backend::MyAutodiffBackend;
 use bevy::prelude::*;
+use burn::Tensor;
 use itertools::Itertools;
 
 pub fn control_companies(
-    query: Query<(&Name, &Stock, &Processors, &Money, &LastTickMoney)>,
+    companies: Query<(
+        &Name,
+        &Stock,
+        &Processors,
+        &Money,
+        &LastTickMoney,
+        &CompanyState,
+        &CompanyAction,
+    )>,
     resources: Res<Resources>,
     recipes: Res<Recipes>,
     action_space: Res<ActionSpace>,
     marketplace: Res<Marketplace>,
 ) {
-    for (name, stock, processors, money, last_tick_money) in query.iter() {
-        let reward = money.0 - last_tick_money.0;
+    for (name, stock, processors, money, last_tick_money, last_state, last_action) in
+        companies.iter()
+    {
         let mut processor_counts = vec![];
         // Get processor counts
         for recipe_id in recipes.recipes.iter().map(|x| x.0).sorted() {
@@ -64,21 +76,63 @@ pub fn control_companies(
             stock: stock_vec,
         };
 
-        // TODO: Ask agent for next action
+        // Deep Q learning algorith
+        let device = burn::backend::wgpu::WgpuDevice::default();
+        let mut q_network = crate::components::reinforcement_learning::nn::NeuralNetwork::new(
+            &device,
+            company_state.get_size(resources.resources.len(), recipes.recipes.len()),
+            action_space.actions.len(),
+        );
+        let alpha = 0.01;
+        let gamma = 0.01;
+        let s_plus_1 = company_state.as_tensor();
+        let s = last_state.as_tensor();
+        let a = last_action.0;
+        let r_s_a = money.0 - last_tick_money.0;
+        let output = q_network.forward(s.clone()).to_data();
+        let current_q_values = output.as_slice().unwrap();
+
+        let q_s_a: f64 = current_q_values[a];
+        let max_q_s_a_plus_1: f64 = q_network
+            .forward(s_plus_1.clone())
+            .max()
+            .to_data()
+            .as_slice()
+            .unwrap()[0];
+
+        let new_q_value = q_s_a + alpha * (r_s_a + gamma * max_q_s_a_plus_1 - q_s_a);
+        let mut target_q_values = current_q_values.to_vec();
+        target_q_values[a] = new_q_value;
+        q_network.train(
+            s,
+            Tensor::<MyAutodiffBackend, 1>::from_data(&target_q_values[..], &device),
+        );
+
+        // Select new action
+        let next_action_index: i32 = q_network
+            .forward(s_plus_1.clone())
+            .argmax(1)
+            .to_data()
+            .as_slice()
+            .unwrap()[0];
+        let next_action = action_space
+            .actions
+            .get(next_action_index as usize)
+            .unwrap();
 
         // // Act according to agent decision
-        // match action_space.actions[action] {
-        //     CompanyAction::Nothing => {
+        // match action_space.actions[next_action] {
+        //     CompanyActionEnum::Nothing => {
         //         // do nothing
         //         return;
         //     }
-        //     CompanyAction::BuyProcessor(recipe) => {
+        //     CompanyActionEnum::BuyProcessor(recipe) => {
         //         if recipe_data.recipes.len() <= recipe {
         //             return;
         //         }
         //         self.buy_processor(recipe, processor_price, &recipe_data);
         //     }
-        //     CompanyAction::SellProcessor(recipe) => {
+        //     CompanyActionEnum::SellProcessor(recipe) => {
         //         // Search for processor with given recipe
         //         for (processor_handle, processor) in self.processors.iter().enumerate() {
         //             if processor.recipe == recipe {
@@ -87,7 +141,7 @@ pub fn control_companies(
         //             }
         //         }
         //     }
-        //     CompanyAction::BuyResource(resource, amount) => {
+        //     CompanyActionEnum::BuyResource(resource, amount) => {
         //         // Buy resource to current best price
         //         if market_data.price_index[&resource].is_none() {
         //             return;
@@ -98,7 +152,7 @@ pub fn control_companies(
         //             market_data.price_index[&resource].unwrap().1,
         //         );
         //     }
-        //     CompanyAction::SellResource(resource, amount) => {
+        //     CompanyActionEnum::SellResource(resource, amount) => {
         //         // Sell resource to current best price
         //         if market_data.order_index[&resource].is_none() {
         //             return;
