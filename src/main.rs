@@ -181,9 +181,9 @@ fn setup_camera(mut commands: Commands) {
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(EguiPlugin::default())
+        // .add_plugins(EguiPlugin::default())
         // .add_plugins(WorldInspectorPlugin::new())
-        .add_systems(EguiPrimaryContextPass, graph_ui_system)
+        // .add_systems(EguiPrimaryContextPass, graph_ui_system)
         .add_systems(Startup, setup_camera)
         .add_systems(
             Startup,
