@@ -1,10 +1,13 @@
 use crate::components::economy::money::LastTickMoney;
-use crate::components::economy::processor::Processors;
+use crate::components::economy::processor::{Processor, Processors, Productive};
+use crate::components::economy::production_speed::ProductionSpeed;
+use crate::components::economy::recipe::Recipe;
 use crate::components::economy::stock::Stock;
 use crate::components::reinforcement_learning::action::CompanyAction;
 use crate::components::reinforcement_learning::company_state::CompanyState;
 use crate::components::{common::Name, economy::money::Money};
 use crate::resources::economy::marketplace::Marketplace;
+use crate::resources::economy::processor::ProcessorPrice;
 use crate::resources::economy::recipes::Recipes;
 use crate::resources::economy::resources::Resources;
 use crate::resources::reinforcement_learning::action_space::{ActionSpace, CompanyActionEnum};
@@ -14,28 +17,30 @@ use burn::Tensor;
 use itertools::Itertools;
 
 pub fn control_companies(
-    companies: Query<(
+    mut commands: Commands,
+    mut companies: Query<(
         &Name,
         &Stock,
-        &Processors,
-        &Money,
+        &mut Processors,
+        &mut Money,
         &LastTickMoney,
         &CompanyState,
         &CompanyAction,
     )>,
     resources: Res<Resources>,
     recipes: Res<Recipes>,
+    processor_price: Res<ProcessorPrice>,
     action_space: Res<ActionSpace>,
     marketplace: Res<Marketplace>,
 ) {
-    for (name, stock, processors, money, last_tick_money, last_state, last_action) in
-        companies.iter()
+    for (name, stock, mut processors, mut money, last_tick_money, last_state, last_action) in
+        companies.iter_mut()
     {
         let mut processor_counts = vec![];
         // Get processor counts
         for recipe_id in recipes.recipes.iter().map(|x| x.0).sorted() {
             let mut processor_count = 0;
-            for processor in processors
+            for _ in processors
                 .processors
                 .iter()
                 .filter(|x| x.recipe.0 == *recipe_id)
@@ -120,49 +125,63 @@ pub fn control_companies(
             .get(next_action_index as usize)
             .unwrap();
 
-        // // Act according to agent decision
-        // match action_space.actions[next_action] {
-        //     CompanyActionEnum::Nothing => {
-        //         // do nothing
-        //         return;
-        //     }
-        //     CompanyActionEnum::BuyProcessor(recipe) => {
-        //         if recipe_data.recipes.len() <= recipe {
-        //             return;
-        //         }
-        //         self.buy_processor(recipe, processor_price, &recipe_data);
-        //     }
-        //     CompanyActionEnum::SellProcessor(recipe) => {
-        //         // Search for processor with given recipe
-        //         for (processor_handle, processor) in self.processors.iter().enumerate() {
-        //             if processor.recipe == recipe {
-        //                 self.sell_processor(processor_handle, processor_price);
-        //                 return;
-        //             }
-        //         }
-        //     }
-        //     CompanyActionEnum::BuyResource(resource, amount) => {
-        //         // Buy resource to current best price
-        //         if market_data.price_index[&resource].is_none() {
-        //             return;
-        //         }
-        //         self.place_order(
-        //             resource,
-        //             amount as f64,
-        //             market_data.price_index[&resource].unwrap().1,
-        //         );
-        //     }
-        //     CompanyActionEnum::SellResource(resource, amount) => {
-        //         // Sell resource to current best price
-        //         if market_data.order_index[&resource].is_none() {
-        //             return;
-        //         }
-        //         self.place_offer(
-        //             resource,
-        //             amount as f64,
-        //             market_data.order_index[&resource].unwrap().1,
-        //         );
-        //     }
-        // }
+        // Act according to agent decision
+        match next_action {
+            CompanyActionEnum::Nothing => {
+                // do nothing
+                return;
+            }
+            CompanyActionEnum::BuyProcessor(recipe) => {
+                if recipes.recipes.len() <= *recipe {
+                    return;
+                }
+                // Check if the company has enough funding
+                if money.0 < processor_price.0 {
+                    return;
+                }
+                money.0 -= processor_price.0;
+                // Create processor
+                let processor = Processor {
+                    production_speed: ProductionSpeed(1.0),
+                    productive: Productive(true),
+                    recipe: Recipe(*recipe),
+                };
+                processors.processors.push(processor);
+            }
+            CompanyActionEnum::SellProcessor(recipe) => {
+                // Search for processor with given recipe
+                if recipes.recipes.len() <= *recipe {
+                    return;
+                }
+                for (i, processor) in processors.processors.iter_mut().enumerate() {
+                    if processor.recipe.0 == *recipe {
+                        processors.processors.remove(i);
+                        return;
+                    }
+                }
+            }
+            CompanyActionEnum::BuyResource(resource, amount) => {
+                // // Buy resource to current best price
+                // if market_data.price_index[&resource].is_none() {
+                //     return;
+                // }
+                // self.place_order(
+                //     resource,
+                //     amount as f64,
+                //     market_data.price_index[&resource].unwrap().1,
+                // );
+            }
+            CompanyActionEnum::SellResource(resource, amount) => {
+                // // Sell resource to current best price
+                // if market_data.order_index[&resource].is_none() {
+                //     return;
+                // }
+                // self.place_offer(
+                //     resource,
+                //     amount as f64,
+                //     market_data.order_index[&resource].unwrap().1,
+                // );
+            }
+        }
     }
 }
