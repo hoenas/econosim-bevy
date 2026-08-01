@@ -14,5 +14,7 @@ itertools = "0.14.0"
 # uses String which doesn't implement WriteColor, but codespan-reporting always expects it.
 naga = { version = "=26.0.0", features = ["termcolor"] }
 ordered-float = "5.1.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 plotters = "0.3.7"
 rand = "0.9.2"

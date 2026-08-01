@@ -8,6 +8,7 @@ use crate::resources::economy::recipes::Recipes;
 use crate::resources::economy::resources::Resources;
 use crate::resources::reinforcement_learning::action_space::{ActionSpace, CompanyActionEnum};
 use crate::resources::sim_history::{CompanyRecord, SimHistory};
+use crate::resources::save_state::SaveLoadState;
 use crate::resources::sim_state::SimState;
 use bevy::color::Color;
 use bevy::prelude::*;
@@ -89,6 +90,7 @@ pub fn draw_dashboard(
     currency: Res<Currency>,
     mut time_fixed: ResMut<Time<Fixed>>,
     mut sim_state: ResMut<SimState>,
+    mut save_load: ResMut<SaveLoadState>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return; };
 
@@ -124,6 +126,17 @@ pub fn draw_dashboard(
                     .changed()
                 {
                     time_fixed.set_timestep(Duration::from_secs_f64(1.0 / hz));
+                }
+            });
+            // ── Save / Load ────────────────────────────────────────────────
+            ui.horizontal(|ui| {
+                ui.label("Save:");
+                ui.text_edit_singleline(&mut save_load.name);
+                if ui.button("💾 Save").clicked() {
+                    save_load.save_requested = true;
+                }
+                if ui.button("📂 Load").clicked() {
+                    save_load.load_requested = true;
                 }
             });
             ui.separator();
