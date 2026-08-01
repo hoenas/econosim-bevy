@@ -23,6 +23,7 @@
             udev
             fontconfig
             freetype
+            pipewire
             xorg.libX11
             xorg.libXcursor
             xorg.libXrandr
@@ -39,6 +40,7 @@
               rustfmt
             ];
             LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
+            ALSA_PLUGIN_DIR = "${pkgs.pipewire}/lib/alsa-lib";
           };
         }
       );
