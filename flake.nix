@@ -9,25 +9,36 @@
       (system:
         let
           overlays = [ (import rust-overlay) ];
-          pkgs = import nixpkgs {
-            inherit system overlays;
+          pkgs = import nixpkgs { inherit system overlays; };
+          rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+            extensions = [ "rust-src" ];
           };
+          nativeBuildInputs = with pkgs; [ pkg-config ];
+          buildInputs = with pkgs; [
+            wayland
+            libxkbcommon
+            libGL
+            vulkan-loader
+            alsa-lib
+            udev
+            fontconfig
+            freetype
+            xorg.libX11
+            xorg.libXcursor
+            xorg.libXrandr
+            xorg.libXi
+          ];
         in
-        with pkgs;
         {
-          devShells.default = mkShell {
-            buildInputs = with pkgs; [
-              (rust-bin.stable.latest.default.override {
-                extensions = [ "rust-src" ];
-                targets = [ "x86_64-unknown-linux-gnu" ];
-              })
-            ] ++  [
-	            cargo-generate
-                rust-analyzer
-                rustfmt
-                wayland
-                wayland.dev
+          devShells.default = pkgs.mkShell {
+            inherit nativeBuildInputs buildInputs;
+            packages = with pkgs; [
+              rustToolchain
+              cargo-generate
+              rust-analyzer
+              rustfmt
             ];
+            LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
           };
         }
       );
