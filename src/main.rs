@@ -36,6 +36,7 @@ use econosim_bevy::systems::economy::marketplace::{update_order_index, update_pr
 use econosim_bevy::systems::economy::processor::update_processors;
 use econosim_bevy::systems::economy::producer::manage_producers;
 use econosim_bevy::resources::sim_history::SimHistory;
+use econosim_bevy::resources::sim_state::SimState;
 use econosim_bevy::systems::reinforcement_learning::company_controller::control_companies;
 use econosim_bevy::systems::ui::dashboard::{draw_dashboard, update_sim_history};
 use std::collections::HashMap;
@@ -144,6 +145,25 @@ fn setup_camera(mut commands: Commands) {
     ));
 }
 
+fn sync_sim_time(sim_state: Res<SimState>, mut time_virtual: ResMut<Time<Virtual>>) {
+    if sim_state.paused {
+        time_virtual.pause();
+    } else {
+        time_virtual.unpause();
+    }
+}
+
+fn step_simulation(world: &mut World) {
+    let should_step = {
+        let s = world.resource::<SimState>();
+        s.paused && s.step_requested
+    };
+    if should_step {
+        world.resource_mut::<SimState>().step_requested = false;
+        world.run_schedule(FixedUpdate);
+    }
+}
+
 fn create_action_space(mut commands: Commands, resources: Res<Resources>, recipes: Res<Recipes>) {
     commands.insert_resource(ActionSpace::new(
         resources.resources.len(),
@@ -157,6 +177,7 @@ fn main() {
         .add_plugins(EguiPlugin::default())
         .insert_resource(Time::<Fixed>::from_hz(20.0))
         .insert_resource(SimHistory::default())
+        .insert_resource(SimState::default())
         .insert_non_send_resource(QNetworkStore::default())
         .add_systems(Startup, setup_camera)
         .add_systems(
@@ -171,6 +192,8 @@ fn main() {
                 create_consumers_and_producers.after(create_recipes),
             ),
         )
+        .add_systems(PreUpdate, sync_sim_time)
+        .add_systems(PostUpdate, step_simulation)
         .add_systems(FixedUpdate, control_companies)
         .add_systems(FixedUpdate, update_sim_history.after(control_companies))
         .add_systems(EguiPrimaryContextPass, draw_dashboard)

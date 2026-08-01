@@ -8,6 +8,7 @@ use crate::resources::economy::recipes::Recipes;
 use crate::resources::economy::resources::Resources;
 use crate::resources::reinforcement_learning::action_space::{ActionSpace, CompanyActionEnum};
 use crate::resources::sim_history::{CompanyRecord, SimHistory};
+use crate::resources::sim_state::SimState;
 use bevy::color::Color;
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
@@ -87,6 +88,7 @@ pub fn draw_dashboard(
     resources: Res<Resources>,
     currency: Res<Currency>,
     mut time_fixed: ResMut<Time<Fixed>>,
+    mut sim_state: ResMut<SimState>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return; };
 
@@ -95,10 +97,21 @@ pub fn draw_dashboard(
         .default_height(600.0)
         .resizable(true)
         .show(ctx, |ui| {
-            // ── Simulation speed ───────────────────────────────────────────
-            let mut hz = 1.0 / time_fixed.timestep().as_secs_f64();
+            // ── Playback controls ──────────────────────────────────────────
             ui.horizontal(|ui| {
-                ui.label("Sim speed:");
+                let pause_label = if sim_state.paused { "▶ Resume" } else { "⏸ Pause" };
+                if ui.button(pause_label).clicked() {
+                    sim_state.paused = !sim_state.paused;
+                }
+                let step_btn = ui.add_enabled(sim_state.paused, egui::Button::new("⏭ Step"));
+                if step_btn.clicked() {
+                    sim_state.step_requested = true;
+                }
+
+                ui.separator();
+
+                let mut hz = 1.0 / time_fixed.timestep().as_secs_f64();
+                ui.label("Speed:");
                 if ui
                     .add(
                         egui::Slider::new(&mut hz, 0.5..=20.0)
