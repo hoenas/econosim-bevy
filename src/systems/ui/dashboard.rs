@@ -5,6 +5,7 @@ use crate::components::economy::stock::Stock;
 use crate::components::reinforcement_learning::action::CompanyAction;
 use crate::components::reinforcement_learning::confidence::CompanyConfidence;
 use crate::resources::economy::common::Currency;
+use crate::resources::economy::marketplace::Marketplace;
 use crate::resources::economy::recipes::Recipes;
 use crate::resources::economy::resources::Resources;
 use crate::resources::reinforcement_learning::action_space::{ActionSpace, CompanyActionEnum};
@@ -67,6 +68,38 @@ fn bevy_to_egui(color: Color) -> egui::Color32 {
         (c.green.clamp(0.0, 1.0) * 255.0) as u8,
         (c.blue.clamp(0.0, 1.0) * 255.0) as u8,
     )
+}
+
+/// Records per-resource offer/order prices into SimHistory every tick.
+pub fn update_marketplace_history(
+    mut history: ResMut<SimHistory>,
+    marketplace: Res<Marketplace>,
+    resources: Res<Resources>,
+) {
+    let mp = &mut history.marketplace;
+    for resource_id in resources.resources.keys() {
+        let offer_price = marketplace
+            .price_index
+            .get(resource_id)
+            .and_then(|opt| opt.as_ref())
+            .map(|(_, p)| *p)
+            .unwrap_or(0.0);
+        mp.offer_price_history
+            .entry(*resource_id)
+            .or_default()
+            .push(offer_price);
+
+        let order_price = marketplace
+            .order_index
+            .get(resource_id)
+            .and_then(|opt| opt.as_ref())
+            .map(|(_, p)| *p)
+            .unwrap_or(0.0);
+        mp.order_price_history
+            .entry(*resource_id)
+            .or_default()
+            .push(order_price);
+    }
 }
 
 /// Records each company's money balance and last action every tick.

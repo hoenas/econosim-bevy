@@ -12,7 +12,17 @@ pub struct CompanyRecord {
     pub action_history: Vec<(String, Option<f32>)>,
 }
 
+/// Per-resource price histories captured each FixedUpdate tick.
+#[derive(Default)]
+pub struct MarketplaceRecord {
+    /// Best offer price (supply side) per resource, one entry per tick.
+    pub offer_price_history: HashMap<usize, Vec<f64>>,
+    /// Best order price (demand side) per resource, one entry per tick.
+    pub order_price_history: HashMap<usize, Vec<f64>>,
+}
+
 #[derive(Resource, Default)]
 pub struct SimHistory {
     pub companies: HashMap<Entity, CompanyRecord>,
+    pub marketplace: MarketplaceRecord,
 }

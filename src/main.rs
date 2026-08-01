@@ -46,7 +46,8 @@ use econosim_bevy::systems::economy::marketplace::{update_order_index, update_pr
 use econosim_bevy::systems::economy::processor::update_processors;
 use econosim_bevy::systems::economy::producer::manage_producers;
 use econosim_bevy::systems::reinforcement_learning::company_controller::control_companies;
-use econosim_bevy::systems::ui::dashboard::{draw_dashboard, update_sim_history};
+use econosim_bevy::systems::ui::dashboard::{draw_dashboard, update_marketplace_history, update_sim_history};
+use econosim_bevy::systems::ui::statistics::draw_marketplace_dashboard;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -444,7 +445,9 @@ fn main() {
         )
         .add_systems(FixedUpdate, control_companies)
         .add_systems(FixedUpdate, update_sim_history.after(control_companies))
+        .add_systems(FixedUpdate, update_marketplace_history.after(update_price_index).after(update_order_index))
         .add_systems(EguiPrimaryContextPass, draw_dashboard)
+        .add_systems(EguiPrimaryContextPass, draw_marketplace_dashboard)
         .add_systems(FixedUpdate, update_processors)
         .add_systems(Update, (clean_company_texts, draw_companies))
         .add_systems(FixedUpdate, (manage_consumers, manage_producers))
