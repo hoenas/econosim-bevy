@@ -45,7 +45,7 @@ pub fn control_companies(
     recipes: Res<Recipes>,
     processor_price: Res<ProcessorPrice>,
     action_space: Res<ActionSpace>,
-    marketplace: Res<Marketplace>,
+    mut marketplace: ResMut<Marketplace>,
 ) {
     let device = burn::backend::wgpu::WgpuDevice::default();
     let state_size =
@@ -94,8 +94,8 @@ pub fn control_companies(
             }
         }
         let mut stock_vec = vec![];
-        for resource in stock.resources.iter().map(|x| *x.0).sorted() {
-            stock_vec.push(*stock.resources.get(&resource).unwrap());
+        for &resource_id in &sorted_resource_ids {
+            stock_vec.push(stock.resources.get(&resource_id).copied().unwrap_or(0.0));
         }
         let current_state = CompanyState {
             money: money.0,
@@ -195,32 +195,41 @@ pub fn control_companies(
                     if let Some(Some((_, best_price))) =
                         marketplace.price_index.get(&resource_id)
                     {
+                        let best_price = *best_price;
                         commands.spawn(OrderBundle {
                             order: Order {
                                 amount: *amount as f64,
-                                max_price_per_unit: *best_price,
+                                max_price_per_unit: best_price,
                                 company: Some(entity),
                                 resource: resource_id,
                             },
                             time_to_live: TimeToLive(100),
                         });
+                        marketplace.statistics.company_orders_placed += 1;
                     }
                 }
             }
             CompanyActionEnum::SellResource(resource_idx, amount) => {
                 if let Some(&resource_id) = sorted_resource_ids.get(*resource_idx) {
-                    if let Some(Some((_, best_price))) =
-                        marketplace.order_index.get(&resource_id)
-                    {
-                        commands.spawn(OfferBundle {
-                            offer: Offer {
-                                amount: *amount as f64,
-                                price_per_unit: *best_price,
-                                company: Some(entity),
-                                resource: resource_id,
-                            },
-                            time_to_live: TimeToLive(100),
-                        });
+                    // Cap the offer to what the company actually holds right now.
+                    let available = stock.resources.get(&resource_id).copied().unwrap_or(0.0);
+                    let offer_amount = (*amount as f64).min(available);
+                    if offer_amount > 0.0 {
+                        if let Some(Some((_, best_price))) =
+                            marketplace.order_index.get(&resource_id)
+                        {
+                            let best_price = *best_price;
+                            commands.spawn(OfferBundle {
+                                offer: Offer {
+                                    amount: offer_amount,
+                                    price_per_unit: best_price,
+                                    company: Some(entity),
+                                    resource: resource_id,
+                                },
+                                time_to_live: TimeToLive(100),
+                            });
+                            marketplace.statistics.company_offers_placed += 1;
+                        }
                     }
                 }
             }

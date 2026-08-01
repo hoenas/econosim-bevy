@@ -15,12 +15,9 @@ use econosim_bevy::components::economy::money::LastTickMoney;
 use econosim_bevy::components::economy::money::Money;
 use econosim_bevy::components::economy::offer::Offer;
 use econosim_bevy::components::economy::order::Order;
-use econosim_bevy::components::economy::processor::Productive;
-use econosim_bevy::components::economy::processor::{Processor, Processors};
+use econosim_bevy::components::economy::processor::Processors;
 use econosim_bevy::components::economy::producer::Producer;
 use econosim_bevy::components::economy::producer::ProducerConfig;
-use econosim_bevy::components::economy::production_speed::ProductionSpeed;
-use econosim_bevy::components::economy::recipe::Recipe;
 use econosim_bevy::components::economy::stock::Stock;
 use econosim_bevy::components::reinforcement_learning::action::CompanyAction;
 use econosim_bevy::components::reinforcement_learning::company_state::CompanyState;
@@ -70,15 +67,10 @@ fn create_currency(mut commands: Commands) {
 }
 
 fn create_companies(mut commands: Commands, resources: Res<Resources>, recipes: Res<Recipes>) {
-    let mut stock_resources: HashMap<Id, f64> = HashMap::new();
-    for (resource, _) in resources.resources.iter() {
-        stock_resources.insert(*resource, 10000.0);
-    }
-
     for company in 0..3 {
         commands.spawn(Company {
             stock: Stock {
-                resources: stock_resources.clone(),
+                resources: HashMap::new(),
             },
             money: Money(1000.0),
             last_tick_money: LastTickMoney(1000.0),
@@ -86,11 +78,7 @@ fn create_companies(mut commands: Commands, resources: Res<Resources>, recipes: 
             last_action: CompanyAction(0),
             confidence: CompanyConfidence::default(),
             processors: Processors {
-                processors: vec![Processor {
-                    production_speed: ProductionSpeed(1.0),
-                    productive: Productive(true),
-                    recipe: Recipe(0),
-                }],
+                processors: vec![],
             },
             name: Name(format!("Company{}", company)),
             marker: CompanyMarker::default(),
@@ -186,24 +174,20 @@ fn do_reset(world: &mut World) {
         let mut q = world.query_filtered::<Entity, With<CompanyMarker>>();
         q.iter(world).collect()
     };
-    for entity in companies {
-        let stock_resources: HashMap<Id, f64> =
-            resource_ids.iter().map(|&id| (id, 10000.0)).collect();
-        world.entity_mut(entity).insert((
+    for entity in &companies {
+        world.entity_mut(*entity).insert((
             Money(1000.0),
             LastTickMoney(1000.0),
-            Stock { resources: stock_resources },
-            Processors {
-                processors: vec![Processor {
-                    production_speed: ProductionSpeed(1.0),
-                    productive: Productive(true),
-                    recipe: Recipe(0),
-                }],
-            },
+            Stock { resources: HashMap::new() },
+            Processors { processors: vec![] },
             CompanyState::new(resource_ids.len(), recipes_len),
             CompanyAction(0),
             CompanyConfidence::default(),
         ));
+    }
+    let q_store = world.non_send_resource_mut::<QNetworkStore>().into_inner();
+    for entity in &companies {
+        q_store.0.remove(entity);
     }
 
     let producers: Vec<Entity> = {
@@ -220,6 +204,61 @@ fn do_reset(world: &mut World) {
     for entity in consumers {
         world.entity_mut(entity).get_mut::<ConsumerConfig>().unwrap().ticks_since_last_order = 0;
     }
+}
+
+fn spawn_new_company(
+    mut commands: Commands,
+    mut sim_state: ResMut<SimState>,
+    existing: Query<(), With<CompanyMarker>>,
+    resources: Res<Resources>,
+    recipes: Res<Recipes>,
+) {
+    if !sim_state.spawn_company_requested {
+        return;
+    }
+    sim_state.spawn_company_requested = false;
+    let idx = existing.iter().count();
+    commands.spawn(Company {
+        stock: Stock { resources: HashMap::new() },
+        money: Money(1000.0),
+        last_tick_money: LastTickMoney(1000.0),
+        last_state: CompanyState::new(resources.resources.len(), recipes.recipes.len()),
+        last_action: CompanyAction(0),
+        confidence: CompanyConfidence::default(),
+        processors: Processors { processors: vec![] },
+        name: Name(format!("Company{}", idx)),
+        marker: CompanyMarker::default(),
+        color: RenderColor::default(),
+    });
+}
+
+fn remove_company(world: &mut World) {
+    let entity = match world.resource::<SimState>().remove_company_requested {
+        Some(e) => e,
+        None => return,
+    };
+    world.resource_mut::<SimState>().remove_company_requested = None;
+
+    let to_despawn: Vec<Entity> = {
+        let mut orders = world.query::<(Entity, &Order)>();
+        let mut offers = world.query::<(Entity, &Offer)>();
+        orders.iter(world)
+            .filter(|(_, o)| o.company == Some(entity))
+            .map(|(e, _)| e)
+            .chain(
+                offers.iter(world)
+                    .filter(|(_, o)| o.company == Some(entity))
+                    .map(|(e, _)| e)
+            )
+            .collect()
+    };
+    for e in to_despawn {
+        world.despawn(e);
+    }
+
+    world.non_send_resource_mut::<QNetworkStore>().into_inner().0.remove(&entity);
+    world.resource_mut::<SimHistory>().companies.remove(&entity);
+    world.despawn(entity);
 }
 
 fn reset_simulation(world: &mut World) {
@@ -439,7 +478,7 @@ fn main() {
         .add_systems(PreUpdate, sync_sim_time)
         .add_systems(
             PostUpdate,
-            (reset_simulation, step_simulation, save_simulation, load_simulation).chain(),
+            (spawn_new_company, remove_company, reset_simulation, step_simulation, save_simulation, load_simulation).chain(),
         )
         .add_systems(FixedUpdate, control_companies)
         .add_systems(FixedUpdate, update_sim_history.after(control_companies))

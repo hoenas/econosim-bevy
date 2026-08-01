@@ -191,6 +191,9 @@ pub fn draw_dashboard(
                 if ui.button("↺ Reset").clicked() {
                     sim_state.reset_requested = true;
                 }
+                if ui.button("➕ New Company").clicked() {
+                    sim_state.spawn_company_requested = true;
+                }
 
                 ui.separator();
 
@@ -262,11 +265,16 @@ pub fn draw_dashboard(
                 .show(ui, |ui| {
                     // Header: company names + money balance
                     ui.strong("Metric");
-                    for (_, name, _, money, _, color, _) in &sorted_companies {
-                        ui.colored_label(
-                            bevy_to_egui(color.0),
-                            format!("{} ({:.0}{})", name.0, money.0, currency.unit),
-                        );
+                    for (entity, name, _, money, _, color, _) in &sorted_companies {
+                        ui.horizontal(|ui| {
+                            ui.colored_label(
+                                bevy_to_egui(color.0),
+                                format!("{} ({:.0}{})", name.0, money.0, currency.unit),
+                            );
+                            if ui.small_button("✕").clicked() {
+                                sim_state.remove_company_requested = Some(*entity);
+                            }
+                        });
                     }
                     ui.end_row();
 
