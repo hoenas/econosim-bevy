@@ -1,6 +1,8 @@
 use bevy::color::Color;
 use bevy::prelude::{Entity, Resource};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+
+pub const MAX_SUPPLY_DEMAND_SNAPSHOTS: usize = 60;
 
 pub struct CompanyRecord {
     pub name: String,
@@ -12,13 +14,23 @@ pub struct CompanyRecord {
     pub action_history: Vec<(String, Option<f32>)>,
 }
 
-/// Per-resource price histories captured each FixedUpdate tick.
+/// One tick's worth of raw offer/order data per resource.
+pub struct MarketSnapshot {
+    /// resource_id → [(price_per_unit, amount)] for open offers
+    pub offers: HashMap<usize, Vec<(f64, f64)>>,
+    /// resource_id → [(max_price_per_unit, amount)] for open orders
+    pub orders: HashMap<usize, Vec<(f64, f64)>>,
+}
+
+/// Per-resource price histories and supply-demand snapshots captured each FixedUpdate tick.
 #[derive(Default)]
 pub struct MarketplaceRecord {
     /// Best offer price (supply side) per resource, one entry per tick.
     pub offer_price_history: HashMap<usize, Vec<f64>>,
     /// Best order price (demand side) per resource, one entry per tick.
     pub order_price_history: HashMap<usize, Vec<f64>>,
+    /// Rolling window of raw offer/order snapshots (oldest first).
+    pub supply_demand_history: VecDeque<MarketSnapshot>,
 }
 
 #[derive(Resource, Default)]

@@ -1,5 +1,7 @@
 use crate::components::common::{Name, RenderColor};
 use crate::components::economy::money::Money;
+use crate::components::economy::offer::Offer;
+use crate::components::economy::order::Order;
 use crate::components::economy::processor::Processors;
 use crate::components::economy::stock::Stock;
 use crate::components::reinforcement_learning::action::CompanyAction;
@@ -9,7 +11,7 @@ use crate::resources::economy::marketplace::Marketplace;
 use crate::resources::economy::recipes::Recipes;
 use crate::resources::economy::resources::Resources;
 use crate::resources::reinforcement_learning::action_space::{ActionSpace, CompanyActionEnum};
-use crate::resources::sim_history::{CompanyRecord, SimHistory};
+use crate::resources::sim_history::{CompanyRecord, MarketSnapshot, SimHistory, MAX_SUPPLY_DEMAND_SNAPSHOTS};
 use crate::resources::save_state::SaveLoadState;
 use crate::resources::sim_state::SimState;
 use bevy::color::Color;
@@ -70,13 +72,16 @@ fn bevy_to_egui(color: Color) -> egui::Color32 {
     )
 }
 
-/// Records per-resource offer/order prices into SimHistory every tick.
+/// Records per-resource offer/order prices and a raw supply-demand snapshot every tick.
 pub fn update_marketplace_history(
     mut history: ResMut<SimHistory>,
     marketplace: Res<Marketplace>,
     resources: Res<Resources>,
+    offers: Query<&Offer>,
+    orders: Query<&Order>,
 ) {
     let mp = &mut history.marketplace;
+
     for resource_id in resources.resources.keys() {
         let offer_price = marketplace
             .price_index
@@ -99,6 +104,35 @@ pub fn update_marketplace_history(
             .entry(*resource_id)
             .or_default()
             .push(order_price);
+    }
+
+    // Capture raw pairs for the supply-demand staircase
+    let mut snap_offers = std::collections::HashMap::new();
+    let mut snap_orders = std::collections::HashMap::new();
+    for &res_id in resources.resources.keys() {
+        snap_offers.insert(
+            res_id,
+            offers
+                .iter()
+                .filter(|o| o.resource == res_id && o.amount > 0.0)
+                .map(|o| (o.price_per_unit, o.amount))
+                .collect(),
+        );
+        snap_orders.insert(
+            res_id,
+            orders
+                .iter()
+                .filter(|o| o.resource == res_id)
+                .map(|o| (o.max_price_per_unit, o.amount))
+                .collect(),
+        );
+    }
+    mp.supply_demand_history.push_back(MarketSnapshot {
+        offers: snap_offers,
+        orders: snap_orders,
+    });
+    if mp.supply_demand_history.len() > MAX_SUPPLY_DEMAND_SNAPSHOTS {
+        mp.supply_demand_history.pop_front();
     }
 }
 

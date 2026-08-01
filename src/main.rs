@@ -39,8 +39,6 @@ use econosim_bevy::resources::sim_history::SimHistory;
 use econosim_bevy::resources::sim_state::SimState;
 use econosim_bevy::systems::common::update_time_to_live;
 use econosim_bevy::systems::economy::consumer::manage_consumers;
-use econosim_bevy::systems::economy::draw_companies::{clean_company_texts, draw_companies};
-use econosim_bevy::systems::economy::draw_marketplace::{clean_marketplace_texts, draw_marketplace};
 use econosim_bevy::systems::economy::marketplace::execute_orders;
 use econosim_bevy::systems::economy::marketplace::{update_order_index, update_price_index};
 use econosim_bevy::systems::economy::processor::update_processors;
@@ -449,13 +447,11 @@ fn main() {
         .add_systems(EguiPrimaryContextPass, draw_dashboard)
         .add_systems(EguiPrimaryContextPass, draw_marketplace_dashboard)
         .add_systems(FixedUpdate, update_processors)
-        .add_systems(Update, (clean_company_texts, draw_companies))
         .add_systems(FixedUpdate, (manage_consumers, manage_producers))
         .add_systems(FixedUpdate, update_time_to_live)
         .add_systems(
             FixedUpdate,
             (update_price_index, update_order_index, execute_orders),
         )
-        .add_systems(Update, (clean_marketplace_texts, draw_marketplace))
         .run();
 }
