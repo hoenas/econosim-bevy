@@ -24,6 +24,7 @@ use econosim_bevy::components::economy::recipe::Recipe;
 use econosim_bevy::components::economy::stock::Stock;
 use econosim_bevy::components::reinforcement_learning::action::CompanyAction;
 use econosim_bevy::components::reinforcement_learning::company_state::CompanyState;
+use econosim_bevy::components::reinforcement_learning::confidence::CompanyConfidence;
 use econosim_bevy::components::reinforcement_learning::nn::NeuralNetwork;
 use econosim_bevy::resources::economy::common::Currency;
 use econosim_bevy::resources::economy::common::Id;
@@ -84,6 +85,7 @@ fn create_companies(mut commands: Commands, resources: Res<Resources>, recipes: 
             last_tick_money: LastTickMoney(1000.0),
             last_state: CompanyState::new(resources.resources.len(), recipes.recipes.len()),
             last_action: CompanyAction(0),
+            confidence: CompanyConfidence::default(),
             processors: Processors {
                 processors: vec![Processor {
                     production_speed: ProductionSpeed(1.0),
@@ -201,6 +203,7 @@ fn do_reset(world: &mut World) {
             },
             CompanyState::new(resource_ids.len(), recipes_len),
             CompanyAction(0),
+            CompanyConfidence::default(),
         ));
     }
 

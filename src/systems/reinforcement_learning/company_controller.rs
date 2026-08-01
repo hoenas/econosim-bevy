@@ -8,6 +8,7 @@ use crate::components::economy::recipe::Recipe;
 use crate::components::economy::stock::Stock;
 use crate::components::reinforcement_learning::action::CompanyAction;
 use crate::components::reinforcement_learning::company_state::CompanyState;
+use crate::components::reinforcement_learning::confidence::CompanyConfidence;
 use crate::resources::economy::marketplace::Marketplace;
 use crate::resources::economy::processor::ProcessorPrice;
 use crate::resources::economy::recipes::Recipes;
@@ -38,6 +39,7 @@ pub fn control_companies(
         &mut LastTickMoney,
         &mut CompanyState,
         &mut CompanyAction,
+        &mut CompanyConfidence,
     )>,
     resources: Res<Resources>,
     recipes: Res<Recipes>,
@@ -55,7 +57,7 @@ pub fn control_companies(
         resources.resources.keys().copied().sorted().collect();
     let mut rng = rand::rng();
 
-    for (entity, _name, stock, mut processors, mut money, mut last_tick_money, mut last_state, mut last_action) in
+    for (entity, _name, stock, mut processors, mut money, mut last_tick_money, mut last_state, mut last_action, mut confidence) in
         companies.iter_mut()
     {
         // Each company gets its own network and optimizer, initialized lazily
@@ -133,16 +135,31 @@ pub fn control_companies(
 
         q_state.train(s, target_tensor, LEARNING_RATE);
 
-        // Epsilon-greedy: random action with probability EPSILON, greedy otherwise
-        let next_action_index = if rng.random::<f64>() < EPSILON {
+        // Compute Q-values for s' once; used for both action selection and confidence.
+        let q_prime_data = q_state.forward(s_prime).to_data();
+        let q_prime = q_prime_data.as_slice::<f32>().unwrap();
+
+        // Epsilon-greedy: random action with probability EPSILON, greedy otherwise.
+        let exploring = rng.random::<f64>() < EPSILON;
+        let next_action_index = if exploring {
             rng.random_range(0..action_size)
         } else {
-            q_state
-                .forward(s_prime)
-                .argmax(0)
-                .to_data()
-                .as_slice::<i32>()
-                .unwrap()[0] as usize
+            q_prime
+                .iter()
+                .enumerate()
+                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                .map(|(i, _)| i)
+                .unwrap_or(0)
+        };
+
+        // Softmax confidence for greedy actions; None signals exploration.
+        confidence.0 = if exploring {
+            None
+        } else {
+            let max_q = q_prime.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+            let exp_vals: Vec<f32> = q_prime.iter().map(|&q| (q - max_q).exp()).collect();
+            let sum_exp: f32 = exp_vals.iter().sum();
+            Some(exp_vals[next_action_index] / sum_exp)
         };
 
         let next_action = match action_space.actions.get(next_action_index) {

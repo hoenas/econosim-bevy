@@ -3,6 +3,7 @@ use crate::components::economy::money::Money;
 use crate::components::economy::processor::Processors;
 use crate::components::economy::stock::Stock;
 use crate::components::reinforcement_learning::action::CompanyAction;
+use crate::components::reinforcement_learning::confidence::CompanyConfidence;
 use crate::resources::economy::common::Currency;
 use crate::resources::economy::recipes::Recipes;
 use crate::resources::economy::resources::Resources;
@@ -48,6 +49,17 @@ fn action_label(
     }
 }
 
+/// Linearly interpolates red → yellow → green based on confidence in [0, 1].
+fn confidence_color(confidence: f32) -> egui::Color32 {
+    let t = confidence.clamp(0.0, 1.0);
+    let (r, g) = if t < 0.5 {
+        (255, (t * 2.0 * 255.0) as u8)
+    } else {
+        (((1.0 - t) * 2.0 * 255.0) as u8, 255)
+    };
+    egui::Color32::from_rgb(r, g, 0)
+}
+
 fn bevy_to_egui(color: Color) -> egui::Color32 {
     let c = color.to_srgba();
     egui::Color32::from_rgb(
@@ -60,12 +72,12 @@ fn bevy_to_egui(color: Color) -> egui::Color32 {
 /// Records each company's money balance and last action every tick.
 pub fn update_sim_history(
     mut history: ResMut<SimHistory>,
-    query: Query<(Entity, &Name, &Money, &CompanyAction, &RenderColor)>,
+    query: Query<(Entity, &Name, &Money, &CompanyAction, &RenderColor, &CompanyConfidence)>,
     action_space: Res<ActionSpace>,
     resources: Res<Resources>,
     recipes: Res<Recipes>,
 ) {
-    for (entity, name, money, action, color) in query.iter() {
+    for (entity, name, money, action, color, confidence) in query.iter() {
         let record = history.companies.entry(entity).or_insert_with(|| CompanyRecord {
             name: name.0.clone(),
             color: color.0,
@@ -74,7 +86,7 @@ pub fn update_sim_history(
         });
         record.money_history.push(money.0);
         let label = action_label(action.0, &action_space, &resources, &recipes);
-        record.action_history.push(label);
+        record.action_history.push((label, confidence.0));
         if record.action_history.len() > ACTION_HISTORY_CAP {
             record.action_history.remove(0);
         }
@@ -85,7 +97,7 @@ pub fn update_sim_history(
 pub fn draw_dashboard(
     mut contexts: EguiContexts,
     history: Res<SimHistory>,
-    query: Query<(Entity, &Name, &Stock, &Money, &Processors, &RenderColor)>,
+    query: Query<(Entity, &Name, &Stock, &Money, &Processors, &RenderColor, &CompanyConfidence)>,
     resources: Res<Resources>,
     currency: Res<Currency>,
     mut time_fixed: ResMut<Time<Fixed>>,
@@ -168,7 +180,7 @@ pub fn draw_dashboard(
             ui.heading("Current State");
             let sorted_companies: Vec<_> = query
                 .iter()
-                .sorted_by_key(|(_, name, _, _, _, _)| name.0.clone())
+                .sorted_by_key(|(_, name, _, _, _, _, _)| name.0.clone())
                 .collect();
             let sorted_resources: Vec<(usize, String)> = resources
                 .resources
@@ -183,7 +195,7 @@ pub fn draw_dashboard(
                 .show(ui, |ui| {
                     // Header: company names + money balance
                     ui.strong("Metric");
-                    for (_, name, _, money, _, color) in &sorted_companies {
+                    for (_, name, _, money, _, color, _) in &sorted_companies {
                         ui.colored_label(
                             bevy_to_egui(color.0),
                             format!("{} ({:.0}{})", name.0, money.0, currency.unit),
@@ -191,9 +203,23 @@ pub fn draw_dashboard(
                     }
                     ui.end_row();
 
+                    // Confidence (softmax probability of the chosen action)
+                    ui.label("Confidence");
+                    for (_, _, _, _, _, _, conf) in &sorted_companies {
+                        match conf.0 {
+                            Some(c) => {
+                                ui.colored_label(confidence_color(c), format!("{:.1}%", c * 100.0));
+                            }
+                            None => {
+                                ui.colored_label(egui::Color32::GRAY, "exploring");
+                            }
+                        }
+                    }
+                    ui.end_row();
+
                     // Processor count per company
                     ui.label("Processors");
-                    for (_, _, _, _, procs, _) in &sorted_companies {
+                    for (_, _, _, _, procs, _, _) in &sorted_companies {
                         ui.label(procs.processors.len().to_string());
                     }
                     ui.end_row();
@@ -201,7 +227,7 @@ pub fn draw_dashboard(
                     // Stock per resource
                     for (resource_id, resource_name) in &sorted_resources {
                         ui.label(resource_name);
-                        for (_, _, stock, _, _, _) in &sorted_companies {
+                        for (_, _, stock, _, _, _, _) in &sorted_companies {
                             let amt = stock.resources.get(resource_id).copied().unwrap_or(0.0);
                             ui.label(format!("{:.0}", amt));
                         }
@@ -233,8 +259,21 @@ pub fn draw_dashboard(
                     // Last 15 entries, newest at top
                     for i in (max_len.saturating_sub(15)..max_len).rev() {
                         for (_, record) in history.companies.iter().sorted_by_key(|(_, r)| r.name.clone()) {
-                            let label = record.action_history.get(i).map(|s| s.as_str()).unwrap_or("-");
-                            ui.label(label);
+                            match record.action_history.get(i) {
+                                Some((label, Some(conf))) => {
+                                    ui.colored_label(
+                                        confidence_color(*conf),
+                                        format!("{} ({:.1}%)", label, conf * 100.0),
+                                    );
+                                }
+                                Some((label, None)) => {
+                                    ui.colored_label(
+                                        egui::Color32::GRAY,
+                                        format!("{} (exploring)", label),
+                                    );
+                                }
+                                None => { ui.label("-"); }
+                            }
                         }
                         ui.end_row();
                     }
