@@ -44,3 +44,89 @@ pub fn update_processors(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::components::economy::processor::{Processor, Productive};
+    use crate::components::economy::production_speed::ProductionSpeed;
+    use crate::components::economy::recipe::Recipe;
+    use bevy::prelude::*;
+
+    // Default Recipes: recipe 0 consumes {0:10, 1:10, 2:10} and produces {3:1}.
+    fn app() -> App {
+        let mut a = App::new();
+        a.init_resource::<Recipes>();
+        a.add_systems(Update, update_processors);
+        a
+    }
+
+    fn make_processor(speed: f64, active: bool) -> Processors {
+        Processors {
+            processors: vec![Processor {
+                production_speed: ProductionSpeed(speed),
+                productive: Productive(active),
+                recipe: Recipe(0),
+            }],
+        }
+    }
+
+    fn stock_with_ingredients(amount: f64) -> Stock {
+        let mut s = Stock::default();
+        s.resources.insert(0, amount);
+        s.resources.insert(1, amount);
+        s.resources.insert(2, amount);
+        s
+    }
+
+    #[test]
+    fn produces_when_ingredients_available() {
+        let mut app = app();
+        let e = app
+            .world_mut()
+            .spawn((make_processor(1.0, true), stock_with_ingredients(10.0)))
+            .id();
+        app.update();
+        let stock = app.world().get::<Stock>(e).unwrap();
+        assert_eq!(*stock.resources.get(&3).unwrap_or(&0.0), 1.0);
+        assert_eq!(*stock.resources.get(&0).unwrap_or(&0.0), 0.0);
+    }
+
+    #[test]
+    fn does_not_produce_when_ingredients_missing() {
+        let mut app = app();
+        let e = app
+            .world_mut()
+            .spawn((make_processor(1.0, true), Stock::default()))
+            .id();
+        app.update();
+        let stock = app.world().get::<Stock>(e).unwrap();
+        assert_eq!(*stock.resources.get(&3).unwrap_or(&0.0), 0.0);
+    }
+
+    #[test]
+    fn inactive_processor_produces_nothing() {
+        let mut app = app();
+        let e = app
+            .world_mut()
+            .spawn((make_processor(1.0, false), stock_with_ingredients(10.0)))
+            .id();
+        app.update();
+        let stock = app.world().get::<Stock>(e).unwrap();
+        assert_eq!(*stock.resources.get(&3).unwrap_or(&0.0), 0.0);
+        assert_eq!(*stock.resources.get(&0).unwrap(), 10.0);
+    }
+
+    #[test]
+    fn production_scales_with_speed() {
+        let mut app = app();
+        let e = app
+            .world_mut()
+            .spawn((make_processor(2.0, true), stock_with_ingredients(20.0)))
+            .id();
+        app.update();
+        let stock = app.world().get::<Stock>(e).unwrap();
+        assert_eq!(*stock.resources.get(&3).unwrap_or(&0.0), 2.0);
+        assert_eq!(*stock.resources.get(&0).unwrap_or(&0.0), 0.0);
+    }
+}

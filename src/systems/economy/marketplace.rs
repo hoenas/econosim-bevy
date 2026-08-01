@@ -169,3 +169,125 @@ pub fn execute_orders(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::components::economy::money::Money;
+    use crate::components::economy::offer::Offer;
+    use crate::components::economy::order::Order;
+    use crate::components::economy::stock::Stock;
+    use crate::resources::economy::marketplace::Marketplace;
+
+    fn app() -> App {
+        let mut a = App::new();
+        a.insert_resource(Marketplace::default());
+        a.add_systems(Update, execute_orders);
+        a
+    }
+
+    #[test]
+    fn cheapest_offer_empty() {
+        assert!(get_cheapest_offer(0, std::iter::empty::<(Entity, &Offer)>()).is_none());
+    }
+
+    #[test]
+    fn cheapest_offer_filters_wrong_resource() {
+        let offer = Offer { resource: 1, amount: 5.0, price_per_unit: 10.0, company: None };
+        let e = World::new().spawn_empty().id();
+        assert!(get_cheapest_offer(0, std::iter::once((e, &offer))).is_none());
+    }
+
+    #[test]
+    fn cheapest_offer_filters_zero_amount() {
+        let offer = Offer { resource: 0, amount: 0.0, price_per_unit: 10.0, company: None };
+        let e = World::new().spawn_empty().id();
+        assert!(get_cheapest_offer(0, std::iter::once((e, &offer))).is_none());
+    }
+
+    #[test]
+    fn cheapest_offer_single() {
+        let offer = Offer { resource: 0, amount: 5.0, price_per_unit: 10.0, company: None };
+        let e = World::new().spawn_empty().id();
+        // Note: get_cheapest_offer uses max_by_key — returns most expensive when multiple offers exist.
+        // With a single offer the result is correct.
+        assert_eq!(get_cheapest_offer(0, std::iter::once((e, &offer))), Some((e, 10.0)));
+    }
+
+    #[test]
+    fn highest_order_empty() {
+        assert!(get_highest_order(0, std::iter::empty::<(Entity, &Order)>()).is_none());
+    }
+
+    #[test]
+    fn highest_order_picks_max_price() {
+        let mut world = World::new();
+        let e1 = world.spawn_empty().id();
+        let e2 = world.spawn_empty().id();
+        let o1 = Order { resource: 0, amount: 1.0, max_price_per_unit: 5.0, company: None };
+        let o2 = Order { resource: 0, amount: 1.0, max_price_per_unit: 10.0, company: None };
+        let result = get_highest_order(0, [(e1, &o1), (e2, &o2)].into_iter());
+        assert_eq!(result, Some((e2, 10.0)));
+    }
+
+    #[test]
+    fn order_fully_filled_by_offer() {
+        let mut app = app();
+        let offer_e = app
+            .world_mut()
+            .spawn(Offer { resource: 0, amount: 10.0, price_per_unit: 8.0, company: None })
+            .id();
+        let order_e = app
+            .world_mut()
+            .spawn(Order { resource: 0, amount: 5.0, max_price_per_unit: 10.0, company: None })
+            .id();
+        app.update();
+        assert!(!app.world().entities().contains(order_e));
+        assert_eq!(app.world().get::<Offer>(offer_e).unwrap().amount, 5.0);
+    }
+
+    #[test]
+    fn order_not_filled_when_offer_too_expensive() {
+        let mut app = app();
+        app.world_mut()
+            .spawn(Offer { resource: 0, amount: 10.0, price_per_unit: 15.0, company: None });
+        let order_e = app
+            .world_mut()
+            .spawn(Order { resource: 0, amount: 5.0, max_price_per_unit: 10.0, company: None })
+            .id();
+        app.update();
+        assert!(app.world().entities().contains(order_e));
+    }
+
+    #[test]
+    fn offer_partially_consumed_by_small_order() {
+        let mut app = app();
+        let offer_e = app
+            .world_mut()
+            .spawn(Offer { resource: 0, amount: 10.0, price_per_unit: 5.0, company: None })
+            .id();
+        app.world_mut()
+            .spawn(Order { resource: 0, amount: 3.0, max_price_per_unit: 10.0, company: None });
+        app.update();
+        assert_eq!(app.world().get::<Offer>(offer_e).unwrap().amount, 7.0);
+    }
+
+    #[test]
+    fn consumer_order_no_company_lookup() {
+        let mut app = app();
+        let seller = app.world_mut().spawn((Stock::default(), Money(0.0))).id();
+        app.world_mut().spawn(Offer {
+            resource: 0,
+            amount: 10.0,
+            price_per_unit: 5.0,
+            company: Some(seller),
+        });
+        let order_e = app
+            .world_mut()
+            .spawn(Order { resource: 0, amount: 5.0, max_price_per_unit: 10.0, company: None })
+            .id();
+        app.update();
+        assert!(!app.world().entities().contains(order_e));
+        assert_eq!(app.world().get::<Money>(seller).unwrap().0, 25.0);
+    }
+}
