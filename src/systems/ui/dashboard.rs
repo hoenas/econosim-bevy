@@ -30,11 +30,11 @@ fn action_label(
         Some(CompanyActionEnum::Nothing) => "Idle".to_string(),
         Some(CompanyActionEnum::BuyProcessor(r)) => {
             let name = recipes.recipes.get(r).map(|r| r.name.as_str()).unwrap_or("?");
-            format!("+Proc({})", name)
+            format!("Buy Processor ({})", name)
         }
         Some(CompanyActionEnum::SellProcessor(r)) => {
             let name = recipes.recipes.get(r).map(|r| r.name.as_str()).unwrap_or("?");
-            format!("-Proc({})", name)
+            format!("Sell Processor ({})", name)
         }
         Some(CompanyActionEnum::BuyResource(r, a)) => {
             let name = resources.resources.get(r).map(|s| s.as_str()).unwrap_or("?");
