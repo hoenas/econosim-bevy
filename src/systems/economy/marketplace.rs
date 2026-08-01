@@ -37,7 +37,7 @@ pub fn get_cheapest_offer<'a>(
     offers: impl Iterator<Item = (Entity, &'a Offer)>,
 ) -> Option<(Entity, f64)> {
     offers
-        .filter(|(_, order)| order.resource == resource)
+        .filter(|(_, o)| o.resource == resource && o.amount > 0.0)
         .max_by_key(|x| OrderedFloat(x.1.price_per_unit))
         .map(|x| (x.0, x.1.price_per_unit))
 }
@@ -74,6 +74,7 @@ pub fn execute_orders(
                         // Order will be partly finished
                         // Consume offer
                         order.amount -= offer.amount;
+                        offer.amount = 0.0;
                         // Check if the order was created by a real company
                         match order.company {
                             // Order was created by a company

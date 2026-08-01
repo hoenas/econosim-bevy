@@ -1,31 +1,43 @@
-use crate::components::economy::money::LastTickMoney;
+use crate::components::common::{Name, TimeToLive};
+use crate::components::economy::money::{LastTickMoney, Money};
+use crate::components::economy::offer::{Offer, OfferBundle};
+use crate::components::economy::order::{Order, OrderBundle};
 use crate::components::economy::processor::{Processor, Processors, Productive};
 use crate::components::economy::production_speed::ProductionSpeed;
 use crate::components::economy::recipe::Recipe;
 use crate::components::economy::stock::Stock;
 use crate::components::reinforcement_learning::action::CompanyAction;
 use crate::components::reinforcement_learning::company_state::CompanyState;
-use crate::components::{common::Name, economy::money::Money};
 use crate::resources::economy::marketplace::Marketplace;
 use crate::resources::economy::processor::ProcessorPrice;
 use crate::resources::economy::recipes::Recipes;
 use crate::resources::economy::resources::Resources;
 use crate::resources::reinforcement_learning::action_space::{ActionSpace, CompanyActionEnum};
 use crate::resources::reinforcement_learning::backend::MyAutodiffBackend;
+use crate::resources::reinforcement_learning::q_networks::{CompanyQState, QNetworkStore};
 use bevy::prelude::*;
 use burn::Tensor;
 use itertools::Itertools;
+use rand::Rng;
+
+const LEARNING_RATE: f64 = 1e-3;
+// Discount factor: how much future rewards are worth relative to immediate ones
+const GAMMA: f64 = 0.95;
+// Probability of picking a random action instead of the greedy one (exploration)
+const EPSILON: f64 = 0.1;
 
 pub fn control_companies(
     mut commands: Commands,
+    mut q_networks: NonSendMut<QNetworkStore>,
     mut companies: Query<(
+        Entity,
         &Name,
         &Stock,
         &mut Processors,
         &mut Money,
-        &LastTickMoney,
-        &CompanyState,
-        &CompanyAction,
+        &mut LastTickMoney,
+        &mut CompanyState,
+        &mut CompanyAction,
     )>,
     resources: Res<Resources>,
     recipes: Res<Recipes>,
@@ -33,155 +45,171 @@ pub fn control_companies(
     action_space: Res<ActionSpace>,
     marketplace: Res<Marketplace>,
 ) {
-    for (name, stock, mut processors, mut money, last_tick_money, last_state, last_action) in
+    let device = burn::backend::wgpu::WgpuDevice::default();
+    let state_size =
+        CompanyState::new(resources.resources.len(), recipes.recipes.len())
+            .get_size(resources.resources.len(), recipes.recipes.len());
+    let action_size = action_space.actions.len();
+    // Sorted so action indices (BuyResource(i)) map to the same resource as state indices
+    let sorted_resource_ids: Vec<usize> =
+        resources.resources.keys().copied().sorted().collect();
+    let mut rng = rand::rng();
+
+    for (entity, _name, stock, mut processors, mut money, mut last_tick_money, mut last_state, mut last_action) in
         companies.iter_mut()
     {
+        // Each company gets its own network and optimizer, initialized lazily
+        let q_state = q_networks
+            .0
+            .entry(entity)
+            .or_insert_with(|| CompanyQState::new(&device, state_size, action_size));
+
+        // Build s': current observation after the environment responded to last action.
+        // Keys are sorted so the tensor layout is deterministic across ticks.
         let mut processor_counts = vec![];
-        // Get processor counts
         for recipe_id in recipes.recipes.iter().map(|x| x.0).sorted() {
-            let mut processor_count = 0;
-            for _ in processors
+            let count = processors
                 .processors
                 .iter()
-                .filter(|x| x.recipe.0 == *recipe_id)
-            {
-                processor_count += 1;
-            }
-            processor_counts.push(processor_count as f64);
+                .filter(|p| p.recipe.0 == *recipe_id)
+                .count();
+            processor_counts.push(count as f64);
         }
-        // Get order index
         let mut order_index = vec![];
         for resource in marketplace.order_index.iter().map(|x| *x.0).sorted() {
-            let order = marketplace.order_index.get(&resource).unwrap();
-            match order {
-                Some(order) => order_index.push(order.1),
+            match marketplace.order_index.get(&resource).unwrap() {
+                Some(o) => order_index.push(o.1),
                 None => order_index.push(0.0),
             }
         }
-        // Get order index
         let mut price_index = vec![];
         for resource in marketplace.price_index.iter().map(|x| *x.0).sorted() {
-            let price = marketplace.price_index.get(&resource).unwrap();
-            match price {
-                Some(price) => price_index.push(price.1),
+            match marketplace.price_index.get(&resource).unwrap() {
+                Some(p) => price_index.push(p.1),
                 None => price_index.push(0.0),
             }
         }
-        // Get stock
         let mut stock_vec = vec![];
         for resource in stock.resources.iter().map(|x| *x.0).sorted() {
-            let amount = stock.resources.get(&resource).unwrap();
-            stock_vec.push(*amount);
+            stock_vec.push(*stock.resources.get(&resource).unwrap());
         }
-        let company_state = CompanyState {
+        let current_state = CompanyState {
             money: money.0,
-            order_index: order_index,
-            price_index: price_index,
-            processor_counts: processor_counts,
+            order_index,
+            price_index,
+            processor_counts,
             stock: stock_vec,
         };
 
-        // Deep Q learning algorith
-        let device = burn::backend::wgpu::WgpuDevice::default();
-        let mut q_network = crate::components::reinforcement_learning::nn::NeuralNetwork::new(
-            &device,
-            company_state.get_size(resources.resources.len(), recipes.recipes.len()),
-            action_space.actions.len(),
-        );
-        let alpha = 0.01;
-        let gamma = 0.01;
-        let s_plus_1 = company_state.as_tensor();
-        let s = last_state.as_tensor();
+        // --- Bellman / TD update ---
+        // We observed transition (s, a, r, s'). Update only Q(s,a); leave all other
+        // action slots unchanged so we don't regress on actions we didn't take this step.
+        let s: Tensor<MyAutodiffBackend, 1> = last_state.as_tensor();
+        let s_prime: Tensor<MyAutodiffBackend, 1> = current_state.as_tensor();
         let a = last_action.0;
-        let r_s_a = money.0 - last_tick_money.0;
-        let output = q_network.forward(s.clone()).to_data();
-        let current_q_values = output.as_slice().unwrap();
+        let reward = money.0 - last_tick_money.0;
 
-        let q_s_a: f64 = current_q_values[a];
-        let max_q_s_a_plus_1: f64 = q_network
-            .forward(s_plus_1.clone())
+        let current_q_data = q_state.forward(s.clone()).to_data();
+        let current_q_slice = current_q_data.as_slice::<f32>().unwrap();
+
+        let max_q_next = q_state
+            .forward(s_prime.clone())
             .max()
             .to_data()
-            .as_slice()
-            .unwrap()[0];
+            .as_slice::<f32>()
+            .unwrap()[0] as f64;
 
-        let new_q_value = q_s_a + alpha * (r_s_a + gamma * max_q_s_a_plus_1 - q_s_a);
-        let mut target_q_values = current_q_values.to_vec();
-        target_q_values[a] = new_q_value;
-        q_network.train(
-            s,
-            Tensor::<MyAutodiffBackend, 1>::from_data(&target_q_values[..], &device),
-        );
+        let q_s_a = current_q_slice[a] as f64;
+        // Q(s,a) ← Q(s,a) + α · (r + γ · max_a' Q(s',a') − Q(s,a))
+        let new_q = q_s_a + LEARNING_RATE * (reward + GAMMA * max_q_next - q_s_a);
 
-        // Select new action
-        let next_action_index: i32 = q_network
-            .forward(s_plus_1.clone())
-            .argmax(1)
-            .to_data()
-            .as_slice()
-            .unwrap()[0];
-        let next_action = action_space
-            .actions
-            .get(next_action_index as usize)
-            .unwrap();
+        let mut target_q: Vec<f32> = current_q_slice.to_vec();
+        target_q[a] = new_q as f32;
 
-        // Act according to agent decision
+        let target_tensor: Tensor<MyAutodiffBackend, 1> =
+            Tensor::from_data(target_q.as_slice(), &device);
+
+        q_state.train(s, target_tensor, LEARNING_RATE);
+
+        // Epsilon-greedy: random action with probability EPSILON, greedy otherwise
+        let next_action_index = if rng.random::<f64>() < EPSILON {
+            rng.random_range(0..action_size)
+        } else {
+            q_state
+                .forward(s_prime)
+                .argmax(0)
+                .to_data()
+                .as_slice::<i32>()
+                .unwrap()[0] as usize
+        };
+
+        let next_action = match action_space.actions.get(next_action_index) {
+            Some(a) => a,
+            None => continue,
+        };
+
         match next_action {
-            CompanyActionEnum::Nothing => {
-                // do nothing
-                return;
-            }
+            CompanyActionEnum::Nothing => {}
             CompanyActionEnum::BuyProcessor(recipe) => {
-                if recipes.recipes.len() <= *recipe {
-                    return;
+                if *recipe < recipes.recipes.len() && money.0 >= processor_price.0 {
+                    money.0 -= processor_price.0;
+                    processors.processors.push(Processor {
+                        production_speed: ProductionSpeed(1.0),
+                        productive: Productive(true),
+                        recipe: Recipe(*recipe),
+                    });
                 }
-                // Check if the company has enough funding
-                if money.0 < processor_price.0 {
-                    return;
-                }
-                money.0 -= processor_price.0;
-                // Create processor
-                let processor = Processor {
-                    production_speed: ProductionSpeed(1.0),
-                    productive: Productive(true),
-                    recipe: Recipe(*recipe),
-                };
-                processors.processors.push(processor);
             }
             CompanyActionEnum::SellProcessor(recipe) => {
-                // Search for processor with given recipe
-                if recipes.recipes.len() <= *recipe {
-                    return;
-                }
-                for (i, processor) in processors.processors.iter_mut().enumerate() {
-                    if processor.recipe.0 == *recipe {
+                if *recipe < recipes.recipes.len() {
+                    if let Some(i) = processors
+                        .processors
+                        .iter()
+                        .position(|p| p.recipe.0 == *recipe)
+                    {
                         processors.processors.remove(i);
-                        return;
                     }
                 }
             }
-            CompanyActionEnum::BuyResource(resource, amount) => {
-                // // Buy resource to current best price
-                // if market_data.price_index[&resource].is_none() {
-                //     return;
-                // }
-                // self.place_order(
-                //     resource,
-                //     amount as f64,
-                //     market_data.price_index[&resource].unwrap().1,
-                // );
+            CompanyActionEnum::BuyResource(resource_idx, amount) => {
+                if let Some(&resource_id) = sorted_resource_ids.get(*resource_idx) {
+                    if let Some(Some((_, best_price))) =
+                        marketplace.price_index.get(&resource_id)
+                    {
+                        commands.spawn(OrderBundle {
+                            order: Order {
+                                amount: *amount as f64,
+                                max_price_per_unit: *best_price,
+                                company: Some(entity),
+                                resource: resource_id,
+                            },
+                            time_to_live: TimeToLive(100),
+                        });
+                    }
+                }
             }
-            CompanyActionEnum::SellResource(resource, amount) => {
-                // // Sell resource to current best price
-                // if market_data.order_index[&resource].is_none() {
-                //     return;
-                // }
-                // self.place_offer(
-                //     resource,
-                //     amount as f64,
-                //     market_data.order_index[&resource].unwrap().1,
-                // );
+            CompanyActionEnum::SellResource(resource_idx, amount) => {
+                if let Some(&resource_id) = sorted_resource_ids.get(*resource_idx) {
+                    if let Some(Some((_, best_price))) =
+                        marketplace.order_index.get(&resource_id)
+                    {
+                        commands.spawn(OfferBundle {
+                            offer: Offer {
+                                amount: *amount as f64,
+                                price_per_unit: *best_price,
+                                company: Some(entity),
+                                resource: resource_id,
+                            },
+                            time_to_live: TimeToLive(100),
+                        });
+                    }
+                }
             }
         }
+
+        // Record (s', a') so the next tick can compute the transition (s', a', r', s'')
+        *last_tick_money = LastTickMoney(money.0);
+        *last_state = current_state;
+        *last_action = CompanyAction(next_action_index);
     }
 }

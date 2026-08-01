@@ -3,12 +3,10 @@ use burn::Tensor;
 use burn::module::Module;
 use burn::nn::loss::HuberLossConfig;
 use burn::nn::{Linear, LinearConfig, Relu};
+use burn::optim::{GradientsParams, Optimizer};
 use burn::prelude::Backend;
 use burn::tensor::backend::AutodiffBackend;
 
-// Source: https://dev.to/philip_yaw/burn-the-future-of-deep-learning-in-rust-5c5e
-
-// Define a simple feedforward neural network
 #[derive(Module, Debug, Component)]
 pub struct NeuralNetwork<B: Backend> {
     linear1: Linear<B>,
@@ -23,7 +21,8 @@ impl<B: AutodiffBackend> NeuralNetwork<B> {
         action_space_dimensions: usize,
     ) -> Self {
         Self {
-            linear1: LinearConfig::new(state_space_dimensions, state_space_dimensions).init(device),
+            linear1: LinearConfig::new(state_space_dimensions, state_space_dimensions)
+                .init(device),
             linear2: LinearConfig::new(state_space_dimensions, action_space_dimensions)
                 .init(device),
             activation: Relu::new(),
@@ -31,19 +30,33 @@ impl<B: AutodiffBackend> NeuralNetwork<B> {
     }
 
     pub fn forward(&self, input: Tensor<B, 1>) -> Tensor<B, 1> {
-        let x = self.linear1.forward(input);
+        // burn's Linear requires 2D input (batch × features); add a dummy batch dim
+        let x = input.unsqueeze::<2>();
+        let x = self.linear1.forward(x);
         let x = self.activation.forward(x);
         let x = self.linear2.forward(x);
-        self.activation.forward(x)
+        // No ReLU on the output: Q-values can be negative, clamping them would bias learning
+        x.squeeze::<1>()
     }
 
-    pub fn train(&mut self, input: Tensor<B, 1>, target: Tensor<B, 1>) {
-        let outputs = self.forward(input.clone());
-        let loss = HuberLossConfig::new(0.2).init().forward(
-            outputs.clone(),
-            target.clone(),
+    // Takes self by value because burn's optimizer.step() consumes the module to return
+    // an updated copy with new weights — there is no in-place mutation API.
+    pub fn train_step<O: Optimizer<NeuralNetwork<B>, B>>(
+        self,
+        optimizer: &mut O,
+        input: Tensor<B, 1>,
+        target: Tensor<B, 1>,
+        lr: f64,
+    ) -> Self {
+        let outputs = self.forward(input);
+        // Huber loss is more robust than MSE when rewards have occasional large spikes
+        let loss = HuberLossConfig::new(1.0).init().forward(
+            outputs,
+            target,
             burn::nn::loss::Reduction::Auto,
         );
-        loss.backward();
+        let grads = loss.backward();
+        let grads = GradientsParams::from_grads(grads, &self);
+        optimizer.step(lr, self, grads)
     }
 }

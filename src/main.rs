@@ -1,21 +1,14 @@
 #![recursion_limit = "512"]
 use bevy::camera::Camera2d;
-use bevy::prelude::Query;
-use bevy::prelude::Res;
 use bevy::prelude::*;
-use bevy_egui::EguiPrimaryContextPass;
-use bevy_inspector_egui::bevy_egui::EguiPlugin;
 use econosim_bevy::components::common::Name;
 use econosim_bevy::components::common::RenderColor;
-use econosim_bevy::components::common::TimeToLive;
 use econosim_bevy::components::economy::company::Company;
 use econosim_bevy::components::economy::company::CompanyMarker;
 use econosim_bevy::components::economy::consumer::Consumer;
 use econosim_bevy::components::economy::consumer::ConsumerConfig;
 use econosim_bevy::components::economy::money::LastTickMoney;
 use econosim_bevy::components::economy::money::Money;
-use econosim_bevy::components::economy::offer::{Offer, OfferBundle};
-use econosim_bevy::components::economy::order::{Order, OrderBundle};
 use econosim_bevy::components::economy::processor::Productive;
 use econosim_bevy::components::economy::processor::{Processor, Processors};
 use econosim_bevy::components::economy::producer::Producer;
@@ -28,21 +21,20 @@ use econosim_bevy::components::reinforcement_learning::company_state::CompanySta
 use econosim_bevy::resources::economy::common::Currency;
 use econosim_bevy::resources::economy::common::Id;
 use econosim_bevy::resources::economy::marketplace::Marketplace;
+use econosim_bevy::resources::economy::processor::ProcessorPrice;
 use econosim_bevy::resources::economy::recipes::Recipes;
 use econosim_bevy::resources::economy::resources::Resources;
+use econosim_bevy::resources::reinforcement_learning::action_space::ActionSpace;
+use econosim_bevy::resources::reinforcement_learning::q_networks::QNetworkStore;
 use econosim_bevy::systems::common::update_time_to_live;
 use econosim_bevy::systems::economy::consumer::manage_consumers;
 use econosim_bevy::systems::economy::draw_companies::{clean_company_texts, draw_companies};
-use econosim_bevy::systems::economy::producer::manage_producers;
-use econosim_bevy::systems::ui::statistics::graph_system as graph_ui_system;
-
-use econosim_bevy::systems::economy::draw_marketplace::{
-    clean_marketplace_texts, draw_marketplace,
-};
+use econosim_bevy::systems::economy::draw_marketplace::{clean_marketplace_texts, draw_marketplace};
 use econosim_bevy::systems::economy::marketplace::execute_orders;
 use econosim_bevy::systems::economy::marketplace::{update_order_index, update_price_index};
 use econosim_bevy::systems::economy::processor::update_processors;
-use rand::prelude::*;
+use econosim_bevy::systems::economy::producer::manage_producers;
+use econosim_bevy::systems::reinforcement_learning::company_controller::control_companies;
 use std::collections::HashMap;
 
 fn create_resources(mut commands: Commands) {
@@ -51,6 +43,7 @@ fn create_resources(mut commands: Commands) {
 
 fn create_recipes(mut commands: Commands) {
     commands.insert_resource(Recipes::default());
+    commands.insert_resource(ProcessorPrice(100.0));
 }
 
 fn create_marketplace(mut commands: Commands) {
@@ -90,36 +83,6 @@ fn create_companies(mut commands: Commands, resources: Res<Resources>, recipes: 
             marker: CompanyMarker::default(),
             color: RenderColor::default(),
         });
-    }
-}
-
-fn create_offers_and_orders(
-    mut commands: Commands,
-    companies: Query<(Entity, &Money)>,
-    resources: Res<Resources>,
-) {
-    let mut rng = rand::rng();
-    for (company, _) in companies {
-        for resource in resources.resources.keys() {
-            commands.spawn(OfferBundle {
-                offer: Offer {
-                    amount: rng.random_range(0.0..1.0) * 100.0,
-                    price_per_unit: rng.random_range(0.0..1.0) * 10.0,
-                    company: Some(company),
-                    resource: *resource,
-                },
-                time_to_live: TimeToLive(10000),
-            });
-            commands.spawn(OrderBundle {
-                order: Order {
-                    amount: rng.random_range(0.0..1.0) * 10000.0,
-                    max_price_per_unit: rng.random_range(0.0..1.0) * 10.0,
-                    company: Some(company),
-                    resource: *resource,
-                },
-                time_to_live: TimeToLive(10000),
-            });
-        }
     }
 }
 
@@ -178,12 +141,17 @@ fn setup_camera(mut commands: Commands) {
     ));
 }
 
+fn create_action_space(mut commands: Commands, resources: Res<Resources>, recipes: Res<Recipes>) {
+    commands.insert_resource(ActionSpace::new(
+        resources.resources.len(),
+        recipes.recipes.len(),
+    ));
+}
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        // .add_plugins(EguiPlugin::default())
-        // .add_plugins(WorldInspectorPlugin::new())
-        // .add_systems(EguiPrimaryContextPass, graph_ui_system)
+        .insert_non_send_resource(QNetworkStore::default())
         .add_systems(Startup, setup_camera)
         .add_systems(
             Startup,
@@ -193,11 +161,12 @@ fn main() {
                 create_marketplace,
                 create_currency,
                 create_companies.after(create_recipes),
-                // create_offers_and_orders.after(create_companies),
+                create_action_space.after(create_recipes),
                 create_consumers_and_producers.after(create_recipes),
             ),
         )
         // Update companies
+        .add_systems(Update, control_companies)
         .add_systems(Update, update_processors)
         .add_systems(Update, (clean_company_texts, draw_companies))
         // .add_systems(Update, draw_plot)

@@ -1,4 +1,3 @@
-use bevy::prelude::Resource;
 use burn::backend::Autodiff;
 use burn::backend::Wgpu;
 
