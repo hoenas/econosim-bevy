@@ -107,6 +107,9 @@ pub fn draw_dashboard(
                 if step_btn.clicked() {
                     sim_state.step_requested = true;
                 }
+                if ui.button("↺ Reset").clicked() {
+                    sim_state.reset_requested = true;
+                }
 
                 ui.separator();
 

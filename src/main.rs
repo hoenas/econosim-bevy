@@ -21,6 +21,8 @@ use econosim_bevy::components::reinforcement_learning::action::CompanyAction;
 use econosim_bevy::components::reinforcement_learning::company_state::CompanyState;
 use econosim_bevy::resources::economy::common::Currency;
 use econosim_bevy::resources::economy::common::Id;
+use econosim_bevy::components::economy::offer::Offer;
+use econosim_bevy::components::economy::order::Order;
 use econosim_bevy::resources::economy::marketplace::Marketplace;
 use econosim_bevy::resources::economy::processor::ProcessorPrice;
 use econosim_bevy::resources::economy::recipes::Recipes;
@@ -164,6 +166,83 @@ fn step_simulation(world: &mut World) {
     }
 }
 
+fn reset_simulation(world: &mut World) {
+    if !world.resource::<SimState>().reset_requested {
+        return;
+    }
+    world.resource_mut::<SimState>().reset_requested = false;
+
+    // Clear history and marketplace
+    *world.resource_mut::<SimHistory>() = SimHistory::default();
+    *world.resource_mut::<Marketplace>() = Marketplace::default();
+
+    // Despawn all transient market entities
+    let to_despawn: Vec<Entity> = {
+        let mut q = world.query_filtered::<Entity, Or<(With<Order>, With<Offer>)>>();
+        q.iter(world).collect()
+    };
+    for e in to_despawn {
+        world.despawn(e);
+    }
+
+    // Collect sizes needed to rebuild initial company state
+    let resource_ids: Vec<Id> = world
+        .resource::<Resources>()
+        .resources
+        .keys()
+        .copied()
+        .collect();
+    let recipes_len = world.resource::<Recipes>().recipes.len();
+
+    // Reset each company to its starting values
+    let companies: Vec<Entity> = {
+        let mut q = world.query_filtered::<Entity, With<CompanyMarker>>();
+        q.iter(world).collect()
+    };
+    for entity in companies {
+        let stock_resources: HashMap<Id, f64> =
+            resource_ids.iter().map(|&id| (id, 10000.0)).collect();
+        world.entity_mut(entity).insert((
+            Money(1000.0),
+            LastTickMoney(1000.0),
+            Stock { resources: stock_resources },
+            Processors {
+                processors: vec![Processor {
+                    production_speed: ProductionSpeed(1.0),
+                    productive: Productive(true),
+                    recipe: Recipe(0),
+                }],
+            },
+            CompanyState::new(resource_ids.len(), recipes_len),
+            CompanyAction(0),
+        ));
+    }
+
+    // Reset producer and consumer tick counters
+    let producers: Vec<Entity> = {
+        let mut q = world.query_filtered::<Entity, With<ProducerConfig>>();
+        q.iter(world).collect()
+    };
+    for entity in producers {
+        world
+            .entity_mut(entity)
+            .get_mut::<ProducerConfig>()
+            .unwrap()
+            .ticks_since_last_offer = 0;
+    }
+    let consumers: Vec<Entity> = {
+        let mut q = world.query_filtered::<Entity, With<ConsumerConfig>>();
+        q.iter(world).collect()
+    };
+    for entity in consumers {
+        world
+            .entity_mut(entity)
+            .get_mut::<ConsumerConfig>()
+            .unwrap()
+            .ticks_since_last_order = 0;
+    }
+}
+
 fn create_action_space(mut commands: Commands, resources: Res<Resources>, recipes: Res<Recipes>) {
     commands.insert_resource(ActionSpace::new(
         resources.resources.len(),
@@ -193,7 +272,7 @@ fn main() {
             ),
         )
         .add_systems(PreUpdate, sync_sim_time)
-        .add_systems(PostUpdate, step_simulation)
+        .add_systems(PostUpdate, (reset_simulation, step_simulation).chain())
         .add_systems(FixedUpdate, control_companies)
         .add_systems(FixedUpdate, update_sim_history.after(control_companies))
         .add_systems(EguiPrimaryContextPass, draw_dashboard)

@@ -4,4 +4,5 @@ use bevy::prelude::*;
 pub struct SimState {
     pub paused: bool,
     pub step_requested: bool,
+    pub reset_requested: bool,
 }
