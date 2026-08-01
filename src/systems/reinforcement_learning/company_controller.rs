@@ -75,16 +75,18 @@ pub fn control_companies(
                 .count();
             processor_counts.push(count as f64);
         }
+        // Always iterate over the full resource list (not marketplace keys) so the
+        // vectors are always the same length the network was built for.
         let mut order_index = vec![];
-        for resource in marketplace.order_index.iter().map(|x| *x.0).sorted() {
-            match marketplace.order_index.get(&resource).unwrap() {
+        for &resource_id in &sorted_resource_ids {
+            match marketplace.order_index.get(&resource_id).and_then(|v| v.as_ref()) {
                 Some(o) => order_index.push(o.1),
                 None => order_index.push(0.0),
             }
         }
         let mut price_index = vec![];
-        for resource in marketplace.price_index.iter().map(|x| *x.0).sorted() {
-            match marketplace.price_index.get(&resource).unwrap() {
+        for &resource_id in &sorted_resource_ids {
+            match marketplace.price_index.get(&resource_id).and_then(|v| v.as_ref()) {
                 Some(p) => price_index.push(p.1),
                 None => price_index.push(0.0),
             }

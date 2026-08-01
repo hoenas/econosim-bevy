@@ -1,6 +1,7 @@
 #![recursion_limit = "512"]
 use bevy::camera::Camera2d;
 use bevy::prelude::*;
+use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
 use econosim_bevy::components::common::Name;
 use econosim_bevy::components::common::RenderColor;
 use econosim_bevy::components::economy::company::Company;
@@ -34,7 +35,9 @@ use econosim_bevy::systems::economy::marketplace::execute_orders;
 use econosim_bevy::systems::economy::marketplace::{update_order_index, update_price_index};
 use econosim_bevy::systems::economy::processor::update_processors;
 use econosim_bevy::systems::economy::producer::manage_producers;
+use econosim_bevy::resources::sim_history::SimHistory;
 use econosim_bevy::systems::reinforcement_learning::company_controller::control_companies;
+use econosim_bevy::systems::ui::dashboard::{draw_dashboard, update_sim_history};
 use std::collections::HashMap;
 
 fn create_resources(mut commands: Commands) {
@@ -151,6 +154,8 @@ fn create_action_space(mut commands: Commands, resources: Res<Resources>, recipe
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugins(EguiPlugin::default())
+        .insert_resource(SimHistory::default())
         .insert_non_send_resource(QNetworkStore::default())
         .add_systems(Startup, setup_camera)
         .add_systems(
@@ -167,6 +172,8 @@ fn main() {
         )
         // Update companies
         .add_systems(Update, control_companies)
+        .add_systems(Update, update_sim_history.after(control_companies))
+        .add_systems(EguiPrimaryContextPass, draw_dashboard)
         .add_systems(Update, update_processors)
         .add_systems(Update, (clean_company_texts, draw_companies))
         // .add_systems(Update, draw_plot)
