@@ -11,6 +11,7 @@ use crate::resources::sim_history::{CompanyRecord, SimHistory};
 use bevy::color::Color;
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
+use std::time::Duration;
 use egui_plot::{Legend, Line, Plot, PlotPoints};
 use itertools::Itertools;
 
@@ -85,6 +86,7 @@ pub fn draw_dashboard(
     query: Query<(Entity, &Name, &Stock, &Money, &Processors, &RenderColor)>,
     resources: Res<Resources>,
     currency: Res<Currency>,
+    mut time_fixed: ResMut<Time<Fixed>>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return; };
 
@@ -93,6 +95,23 @@ pub fn draw_dashboard(
         .default_height(600.0)
         .resizable(true)
         .show(ctx, |ui| {
+            // ── Simulation speed ───────────────────────────────────────────
+            let mut hz = 1.0 / time_fixed.timestep().as_secs_f64();
+            ui.horizontal(|ui| {
+                ui.label("Sim speed:");
+                if ui
+                    .add(
+                        egui::Slider::new(&mut hz, 0.5..=20.0)
+                            .logarithmic(true)
+                            .text("ticks/s"),
+                    )
+                    .changed()
+                {
+                    time_fixed.set_timestep(Duration::from_secs_f64(1.0 / hz));
+                }
+            });
+            ui.separator();
+
             // ── Money over time ────────────────────────────────────────────
             ui.heading("Money Over Time");
             Plot::new("money_plot")

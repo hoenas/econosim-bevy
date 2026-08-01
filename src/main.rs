@@ -155,6 +155,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(EguiPlugin::default())
+        .insert_resource(Time::<Fixed>::from_hz(20.0))
         .insert_resource(SimHistory::default())
         .insert_non_send_resource(QNetworkStore::default())
         .add_systems(Startup, setup_camera)
@@ -170,19 +171,15 @@ fn main() {
                 create_consumers_and_producers.after(create_recipes),
             ),
         )
-        // Update companies
-        .add_systems(Update, control_companies)
-        .add_systems(Update, update_sim_history.after(control_companies))
+        .add_systems(FixedUpdate, control_companies)
+        .add_systems(FixedUpdate, update_sim_history.after(control_companies))
         .add_systems(EguiPrimaryContextPass, draw_dashboard)
-        .add_systems(Update, update_processors)
+        .add_systems(FixedUpdate, update_processors)
         .add_systems(Update, (clean_company_texts, draw_companies))
-        // .add_systems(Update, draw_plot)
-        // Manage consumers & producers
-        .add_systems(Update, (manage_consumers, manage_producers))
-        // Update market
-        .add_systems(Update, update_time_to_live)
+        .add_systems(FixedUpdate, (manage_consumers, manage_producers))
+        .add_systems(FixedUpdate, update_time_to_live)
         .add_systems(
-            Update,
+            FixedUpdate,
             (update_price_index, update_order_index, execute_orders),
         )
         .add_systems(Update, (clean_marketplace_texts, draw_marketplace))
