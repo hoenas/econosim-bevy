@@ -2,7 +2,7 @@ use bevy::prelude::Resource;
 
 /// Discrete quantity tiers available for buy/sell orders.
 /// One action is generated per resource per tier for both buying and selling.
-const TRADE_AMOUNTS: &[usize] = &[10, 100, 1_000, 10_000];
+const TRADE_AMOUNTS: &[usize] = &[1, 10, 100, 1_000];
 
 #[derive(PartialEq, Eq, Hash, Clone)]
 pub enum CompanyActionEnum {

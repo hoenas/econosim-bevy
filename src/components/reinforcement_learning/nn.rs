@@ -14,7 +14,8 @@ pub struct NeuralNetwork<B: Backend> {
     activation: Relu,
 }
 
-impl<B: AutodiffBackend> NeuralNetwork<B> {
+// forward and new work on any Backend — no autodiff required.
+impl<B: Backend> NeuralNetwork<B> {
     pub fn new(
         device: &B::Device,
         state_space_dimensions: usize,
@@ -38,7 +39,10 @@ impl<B: AutodiffBackend> NeuralNetwork<B> {
         // No ReLU on the output: Q-values can be negative, clamping them would bias learning
         x.squeeze::<1>()
     }
+}
 
+// train_step requires AutodiffBackend — only used during the gradient update.
+impl<B: AutodiffBackend> NeuralNetwork<B> {
     // Takes self by value because burn's optimizer.step() consumes the module to return
     // an updated copy with new weights — there is no in-place mutation API.
     pub fn train_step<O: Optimizer<NeuralNetwork<B>, B>>(

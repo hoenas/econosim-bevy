@@ -186,11 +186,6 @@ fn do_reset(world: &mut World) {
             CompanyConfidence::default(),
         ));
     }
-    let q_store = world.non_send_resource_mut::<QNetworkStore>().into_inner();
-    for entity in &companies {
-        q_store.0.remove(entity);
-    }
-
     let producers: Vec<Entity> = {
         let mut q = world.query_filtered::<Entity, With<ProducerConfig>>();
         q.iter(world).collect()

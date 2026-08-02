@@ -11,7 +11,7 @@ use crate::resources::economy::marketplace::Marketplace;
 use crate::resources::economy::recipes::Recipes;
 use crate::resources::economy::resources::Resources;
 use crate::resources::reinforcement_learning::action_space::{ActionSpace, CompanyActionEnum};
-use crate::resources::sim_history::{CompanyRecord, MarketSnapshot, SimHistory, MAX_SUPPLY_DEMAND_SNAPSHOTS};
+use crate::resources::sim_history::{CompanyRecord, MarketSnapshot, SimHistory, MAX_SUPPLY_DEMAND_SNAPSHOTS, MAX_MONEY_HISTORY, MAX_PRICE_HISTORY, MAX_ACTION_HISTORY};
 use crate::resources::save_state::SaveLoadState;
 use crate::resources::sim_state::SimState;
 use bevy::color::Color;
@@ -21,8 +21,6 @@ use std::time::Duration;
 use egui_plot::{Legend, Line, Plot, PlotPoints};
 use itertools::Itertools;
 
-// Keeps the rolling action log from growing without bound.
-const ACTION_HISTORY_CAP: usize = 200;
 
 fn action_label(
     idx: usize,
@@ -89,10 +87,9 @@ pub fn update_marketplace_history(
             .and_then(|opt| opt.as_ref())
             .map(|(_, p)| *p)
             .unwrap_or(0.0);
-        mp.offer_price_history
-            .entry(*resource_id)
-            .or_default()
-            .push(offer_price);
+        let oh = mp.offer_price_history.entry(*resource_id).or_default();
+        oh.push_back(offer_price);
+        if oh.len() > MAX_PRICE_HISTORY { oh.pop_front(); }
 
         let order_price = marketplace
             .order_index
@@ -100,10 +97,9 @@ pub fn update_marketplace_history(
             .and_then(|opt| opt.as_ref())
             .map(|(_, p)| *p)
             .unwrap_or(0.0);
-        mp.order_price_history
-            .entry(*resource_id)
-            .or_default()
-            .push(order_price);
+        let orh = mp.order_price_history.entry(*resource_id).or_default();
+        orh.push_back(order_price);
+        if orh.len() > MAX_PRICE_HISTORY { orh.pop_front(); }
     }
 
     // Capture raw pairs for the supply-demand staircase
@@ -148,15 +144,14 @@ pub fn update_sim_history(
         let record = history.companies.entry(entity).or_insert_with(|| CompanyRecord {
             name: name.0.clone(),
             color: color.0,
-            money_history: Vec::new(),
-            action_history: Vec::new(),
+            money_history: std::collections::VecDeque::new(),
+            action_history: std::collections::VecDeque::new(),
         });
-        record.money_history.push(money.0);
+        record.money_history.push_back(money.0);
+        if record.money_history.len() > MAX_MONEY_HISTORY { record.money_history.pop_front(); }
         let label = action_label(action.0, &action_space, &resources, &recipes);
-        record.action_history.push((label, confidence.0));
-        if record.action_history.len() > ACTION_HISTORY_CAP {
-            record.action_history.remove(0);
-        }
+        record.action_history.push_back((label, confidence.0));
+        if record.action_history.len() > MAX_ACTION_HISTORY { record.action_history.pop_front(); }
     }
 }
 

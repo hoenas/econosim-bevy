@@ -3,15 +3,18 @@ use bevy::prelude::{Entity, Resource};
 use std::collections::{HashMap, VecDeque};
 
 pub const MAX_SUPPLY_DEMAND_SNAPSHOTS: usize = 60;
+pub const MAX_MONEY_HISTORY: usize = 1_000;
+pub const MAX_PRICE_HISTORY: usize = 1_000;
+pub const MAX_ACTION_HISTORY: usize = 200;
 
 pub struct CompanyRecord {
     pub name: String,
     pub color: Color,
-    /// Full money balance history — one entry per simulation tick.
-    pub money_history: Vec<f64>,
-    /// Rolling buffer of (label, confidence) pairs — one entry per simulation tick.
+    /// Rolling window of money balances — one entry per simulation tick.
+    pub money_history: VecDeque<f64>,
+    /// Rolling window of (label, confidence) pairs — one entry per simulation tick.
     /// Confidence is `None` for exploratory (random) actions.
-    pub action_history: Vec<(String, Option<f32>)>,
+    pub action_history: VecDeque<(String, Option<f32>)>,
 }
 
 /// One tick's worth of raw offer/order data per resource.
@@ -25,10 +28,10 @@ pub struct MarketSnapshot {
 /// Per-resource price histories and supply-demand snapshots captured each FixedUpdate tick.
 #[derive(Default)]
 pub struct MarketplaceRecord {
-    /// Best offer price (supply side) per resource, one entry per tick.
-    pub offer_price_history: HashMap<usize, Vec<f64>>,
-    /// Best order price (demand side) per resource, one entry per tick.
-    pub order_price_history: HashMap<usize, Vec<f64>>,
+    /// Best offer price (supply side) per resource — rolling window.
+    pub offer_price_history: HashMap<usize, VecDeque<f64>>,
+    /// Best order price (demand side) per resource — rolling window.
+    pub order_price_history: HashMap<usize, VecDeque<f64>>,
     /// Rolling window of raw offer/order snapshots (oldest first).
     pub supply_demand_history: VecDeque<MarketSnapshot>,
 }

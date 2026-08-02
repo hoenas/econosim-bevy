@@ -113,11 +113,13 @@ pub fn control_companies(
         let a = last_action.0;
         let reward = money.0 - last_tick_money.0;
 
-        let current_q_data = q_state.forward(s.clone()).to_data();
+        // Use inner (non-autodiff) tensors for inference — avoids building a computation
+        // graph for passes that don't need gradients, which was the memory leak.
+        let current_q_data = q_state.infer(s.clone().inner()).to_data();
         let current_q_slice = current_q_data.as_slice::<f32>().unwrap();
 
         let max_q_next = q_state
-            .forward(s_prime.clone())
+            .target_forward(s_prime.clone().inner())
             .max()
             .to_data()
             .as_slice::<f32>()
@@ -136,7 +138,7 @@ pub fn control_companies(
         q_state.train(s, target_tensor, LEARNING_RATE);
 
         // Compute Q-values for s' once; used for both action selection and confidence.
-        let q_prime_data = q_state.forward(s_prime).to_data();
+        let q_prime_data = q_state.infer(s_prime.inner()).to_data();
         let q_prime = q_prime_data.as_slice::<f32>().unwrap();
 
         // Epsilon-greedy: random action with probability EPSILON, greedy otherwise.

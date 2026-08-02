@@ -1,6 +1,11 @@
 use bevy::ecs::component::Component;
 use burn::prelude::*;
 
+const MONEY_SCALE: f64 = 1_000.0;
+const PRICE_SCALE: f64 = 10.0;
+const STOCK_SCALE: f64 = 1_000.0;
+const PROCESSOR_SCALE: f64 = 10.0;
+
 #[derive(PartialEq, Clone, Component)]
 pub struct CompanyState {
     // Stockpile
@@ -26,12 +31,20 @@ impl CompanyState {
     }
 
     pub fn as_tensor<B: Backend>(&self) -> Tensor<B, 1> {
-        let mut values: Vec<f64> = vec![];
-        values.append(&mut self.stock.clone());
-        values.push(self.money as f64);
-        values.append(&mut self.price_index.clone());
-        values.append(&mut self.order_index.clone());
-        values.append(&mut self.processor_counts.clone());
+        let mut values: Vec<f32> = Vec::new();
+        for &s in &self.stock {
+            values.push((s / STOCK_SCALE) as f32);
+        }
+        values.push((self.money / MONEY_SCALE) as f32);
+        for &p in &self.price_index {
+            values.push((p / PRICE_SCALE) as f32);
+        }
+        for &o in &self.order_index {
+            values.push((o / PRICE_SCALE) as f32);
+        }
+        for &c in &self.processor_counts {
+            values.push((c / PROCESSOR_SCALE) as f32);
+        }
         Tensor::from_data(values.as_slice(), &Default::default())
     }
 
