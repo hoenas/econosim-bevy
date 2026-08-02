@@ -31,6 +31,7 @@ use econosim_bevy::resources::economy::recipes::Recipes;
 use econosim_bevy::resources::economy::resources::Resources;
 use econosim_bevy::resources::reinforcement_learning::action_space::ActionSpace;
 use econosim_bevy::resources::reinforcement_learning::q_networks::{CompanyQState, QNetworkStore};
+use econosim_bevy::resources::reinforcement_learning::training_history::TrainingHistory;
 use econosim_bevy::resources::save_state::{SaveLoadState, SaveMetadata, SaveRecipe};
 use econosim_bevy::resources::sim_history::SimHistory;
 use econosim_bevy::resources::sim_state::SimState;
@@ -43,6 +44,7 @@ use econosim_bevy::systems::economy::producer::manage_producers;
 use econosim_bevy::systems::reinforcement_learning::company_controller::control_companies;
 use econosim_bevy::systems::ui::dashboard::{draw_dashboard, update_marketplace_history, update_sim_history};
 use econosim_bevy::systems::ui::statistics::draw_marketplace_dashboard;
+use econosim_bevy::systems::ui::training::draw_training_dashboard;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -151,6 +153,15 @@ fn sync_sim_time(sim_state: Res<SimState>, mut time_virtual: ResMut<Time<Virtual
 }
 
 fn do_reset(world: &mut World) {
+    // Close out the finished episode for every company before wiping sim state.
+    // TrainingHistory is intentionally NOT reset — it holds the cross-episode learning curve.
+    {
+        let mut training = world.resource_mut::<TrainingHistory>();
+        for record in training.companies.values_mut() {
+            record.end_episode();
+        }
+    }
+
     *world.resource_mut::<SimHistory>() = SimHistory::default();
     *world.resource_mut::<Marketplace>() = Marketplace::default();
     world.resource_mut::<SimState>().tick_count = 0;
@@ -265,6 +276,7 @@ fn remove_company(world: &mut World) {
 
     world.non_send_resource_mut::<QNetworkStore>().into_inner().0.remove(&entity);
     world.resource_mut::<SimHistory>().companies.remove(&entity);
+    world.resource_mut::<TrainingHistory>().companies.remove(&entity);
     world.despawn(entity);
 }
 
@@ -468,6 +480,7 @@ fn main() {
         .insert_resource(SimHistory::default())
         .insert_resource(SimState::default())
         .insert_resource(SaveLoadState::default())
+        .insert_resource(TrainingHistory::default())
         .insert_non_send_resource(QNetworkStore::default())
         .add_systems(Startup, setup_camera)
         .add_systems(
@@ -493,6 +506,7 @@ fn main() {
         .add_systems(FixedUpdate, update_marketplace_history.after(update_price_index).after(update_order_index))
         .add_systems(EguiPrimaryContextPass, draw_dashboard)
         .add_systems(EguiPrimaryContextPass, draw_marketplace_dashboard)
+        .add_systems(EguiPrimaryContextPass, draw_training_dashboard)
         .add_systems(FixedUpdate, update_processors)
         .add_systems(FixedUpdate, (manage_consumers, manage_producers))
         .add_systems(FixedUpdate, update_time_to_live)

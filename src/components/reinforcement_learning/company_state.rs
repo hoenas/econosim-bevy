@@ -1,7 +1,7 @@
 use bevy::ecs::component::Component;
 use burn::prelude::*;
 
-const MONEY_SCALE: f64 = 1_000.0;
+pub const MONEY_SCALE: f64 = 1_000.0;
 const PRICE_SCALE: f64 = 10.0;
 const STOCK_SCALE: f64 = 1_000.0;
 const PROCESSOR_SCALE: f64 = 10.0;
@@ -30,7 +30,9 @@ impl CompanyState {
         }
     }
 
-    pub fn as_tensor<B: Backend>(&self) -> Tensor<B, 1> {
+    /// Flattens the state into the scaled feature vector the network consumes.
+    /// Shared by `as_tensor` and the replay buffer so both use identical scaling/layout.
+    pub fn as_vec(&self) -> Vec<f32> {
         let mut values: Vec<f32> = Vec::new();
         for &s in &self.stock {
             values.push((s / STOCK_SCALE) as f32);
@@ -45,7 +47,11 @@ impl CompanyState {
         for &c in &self.processor_counts {
             values.push((c / PROCESSOR_SCALE) as f32);
         }
-        Tensor::from_data(values.as_slice(), &Default::default())
+        values
+    }
+
+    pub fn as_tensor<B: Backend>(&self) -> Tensor<B, 1> {
+        Tensor::from_data(self.as_vec().as_slice(), &Default::default())
     }
 
     pub fn get_size(&self, resource_count: usize, recipe_count: usize) -> usize {

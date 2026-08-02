@@ -7,15 +7,16 @@ use crate::components::economy::production_speed::ProductionSpeed;
 use crate::components::economy::recipe::Recipe;
 use crate::components::economy::stock::Stock;
 use crate::components::reinforcement_learning::action::CompanyAction;
-use crate::components::reinforcement_learning::company_state::CompanyState;
+use crate::components::reinforcement_learning::company_state::{CompanyState, MONEY_SCALE};
 use crate::components::reinforcement_learning::confidence::CompanyConfidence;
 use crate::resources::economy::marketplace::Marketplace;
 use crate::resources::economy::processor::ProcessorPrice;
 use crate::resources::economy::recipes::Recipes;
 use crate::resources::economy::resources::Resources;
 use crate::resources::reinforcement_learning::action_space::{ActionSpace, CompanyActionEnum};
-use crate::resources::reinforcement_learning::backend::MyAutodiffBackend;
-use crate::resources::reinforcement_learning::q_networks::{CompanyQState, QNetworkStore};
+use crate::resources::reinforcement_learning::backend::{MyAutodiffBackend, MyBackend};
+use crate::resources::reinforcement_learning::q_networks::{CompanyQState, QNetworkStore, Transition};
+use crate::resources::reinforcement_learning::training_history::TrainingHistory;
 use bevy::prelude::*;
 use burn::Tensor;
 use itertools::Itertools;
@@ -24,8 +25,13 @@ use rand::Rng;
 const LEARNING_RATE: f64 = 1e-3;
 // Discount factor: how much future rewards are worth relative to immediate ones
 const GAMMA: f64 = 0.95;
-// Probability of picking a random action instead of the greedy one (exploration)
-const EPSILON: f64 = 0.1;
+// Minibatch size sampled from the replay buffer each gradient step
+const BATCH_SIZE: usize = 32;
+// Exploration schedule: start almost fully random, anneal toward mostly-greedy so early
+// episodes explore broadly and later ones exploit what was learned.
+const EPS_START: f64 = 1.0;
+const EPS_END: f64 = 0.05;
+const EPS_DECAY_STEPS: f64 = 20_000.0;
 
 pub fn control_companies(
     mut commands: Commands,
@@ -46,6 +52,7 @@ pub fn control_companies(
     processor_price: Res<ProcessorPrice>,
     action_space: Res<ActionSpace>,
     mut marketplace: ResMut<Marketplace>,
+    mut training: ResMut<TrainingHistory>,
 ) {
     let device = burn::backend::wgpu::WgpuDevice::default();
     let state_size =
@@ -105,51 +112,80 @@ pub fn control_companies(
             stock: stock_vec,
         };
 
-        // --- Bellman / TD update ---
-        // We observed transition (s, a, r, s'). Update only Q(s,a); leave all other
-        // action slots unchanged so we don't regress on actions we didn't take this step.
-        let s: Tensor<MyAutodiffBackend, 1> = last_state.as_tensor();
-        let s_prime: Tensor<MyAutodiffBackend, 1> = current_state.as_tensor();
+        // --- Experience replay ---
+        // We observed transition (s, a, r, s'); store it and train on a decorrelated
+        // minibatch rather than only this single, highly-correlated sample.
         let a = last_action.0;
-        let reward = money.0 - last_tick_money.0;
+        let raw_reward = money.0 - last_tick_money.0;
+        // Scale the reward like the money input so TD targets stay in the same range as
+        // the network's outputs; otherwise Huber loss clips every error into its linear
+        // region and gradients stall.
+        let reward = (raw_reward / MONEY_SCALE) as f32;
 
-        // Use inner (non-autodiff) tensors for inference — avoids building a computation
-        // graph for passes that don't need gradients, which was the memory leak.
-        let current_q_data = q_state.infer(s.clone().inner()).to_data();
-        let current_q_slice = current_q_data.as_slice::<f32>().unwrap();
+        q_state.remember(Transition {
+            state: last_state.as_vec(),
+            action: a,
+            reward,
+            next_state: current_state.as_vec(),
+        });
 
-        let max_q_next = q_state
-            .target_forward(s_prime.clone().inner())
-            .max()
-            .to_data()
-            .as_slice::<f32>()
-            .unwrap()[0] as f64;
+        if let Some(batch) = q_state.sample_batch(BATCH_SIZE, &mut rng) {
+            let bs = batch.len();
+            let mut s_flat: Vec<f32> = Vec::with_capacity(bs * state_size);
+            let mut sp_flat: Vec<f32> = Vec::with_capacity(bs * state_size);
+            for t in &batch {
+                s_flat.extend_from_slice(&t.state);
+                sp_flat.extend_from_slice(&t.next_state);
+            }
 
-        let q_s_a = current_q_slice[a] as f64;
-        // Q(s,a) ← Q(s,a) + α · (r + γ · max_a' Q(s',a') − Q(s,a))
-        let new_q = q_s_a + LEARNING_RATE * (reward + GAMMA * max_q_next - q_s_a);
+            // Baseline the target on the online net's current Q(s) so untaken actions
+            // produce zero loss; then overwrite each taken action with its Bellman target
+            // r + γ·max_a' Q_target(s',a'). The gradient step does the actual moving — we
+            // must NOT also scale by the learning rate here (that shrinks the effective
+            // step to ~α² and stalls learning).
+            let s_inner: Tensor<MyBackend, 2> =
+                Tensor::<MyBackend, 1>::from_data(s_flat.as_slice(), &device)
+                    .reshape([bs, state_size]);
+            let sp_inner: Tensor<MyBackend, 2> =
+                Tensor::<MyBackend, 1>::from_data(sp_flat.as_slice(), &device)
+                    .reshape([bs, state_size]);
 
-        let mut target_q: Vec<f32> = current_q_slice.to_vec();
-        target_q[a] = new_q as f32;
+            let online_q = q_state.infer_batch(s_inner).to_data();
+            let mut target_flat: Vec<f32> = online_q.as_slice::<f32>().unwrap().to_vec();
+            let max_next_data = q_state.target_forward_batch(sp_inner).max_dim(1).to_data();
+            let max_next = max_next_data.as_slice::<f32>().unwrap();
 
-        let target_tensor: Tensor<MyAutodiffBackend, 1> =
-            Tensor::from_data(target_q.as_slice(), &device);
+            for (i, t) in batch.iter().enumerate() {
+                target_flat[i * action_size + t.action] = t.reward + GAMMA as f32 * max_next[i];
+            }
 
-        q_state.train(s, target_tensor, LEARNING_RATE);
+            let input: Tensor<MyAutodiffBackend, 2> =
+                Tensor::<MyAutodiffBackend, 1>::from_data(s_flat.as_slice(), &device)
+                    .reshape([bs, state_size]);
+            let target: Tensor<MyAutodiffBackend, 2> =
+                Tensor::<MyAutodiffBackend, 1>::from_data(target_flat.as_slice(), &device)
+                    .reshape([bs, action_size]);
+            q_state.train(input, target, LEARNING_RATE);
+        }
 
-        // Compute Q-values for s' once; used for both action selection and confidence.
-        let q_prime_data = q_state.infer(s_prime.inner()).to_data();
+        // --- Action selection ---
+        // Q-values for s' (inner backend — no autodiff graph); reused for confidence.
+        let s_prime_inner: Tensor<MyBackend, 1> = current_state.as_tensor();
+        let q_prime_data = q_state.infer(s_prime_inner).to_data();
         let q_prime = q_prime_data.as_slice::<f32>().unwrap();
 
-        // Epsilon-greedy: random action with probability EPSILON, greedy otherwise.
-        let exploring = rng.random::<f64>() < EPSILON;
+        // Decayed epsilon-greedy: explore with the current (annealing) probability.
+        let epsilon = EPS_END
+            + (EPS_START - EPS_END) * (-(q_state.train_steps() as f64) / EPS_DECAY_STEPS).exp();
+        let exploring = rng.random::<f64>() < epsilon;
         let next_action_index = if exploring {
             rng.random_range(0..action_size)
         } else {
             q_prime
                 .iter()
                 .enumerate()
-                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                // unwrap_or(Equal) keeps a stray NaN from panicking the argmax
+                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                 .map(|(i, _)| i)
                 .unwrap_or(0)
         };
@@ -241,5 +277,10 @@ pub fn control_companies(
         *last_tick_money = LastTickMoney(money.0);
         *last_state = current_state;
         *last_action = CompanyAction(next_action_index);
+
+        // Accumulate the learning curve: raw per-tick PnL into the in-progress episode.
+        let record = training.companies.entry(entity).or_default();
+        record.current_return += raw_reward;
+        training.epsilon = epsilon;
     }
 }

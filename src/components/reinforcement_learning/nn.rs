@@ -30,14 +30,18 @@ impl<B: Backend> NeuralNetwork<B> {
         }
     }
 
+    // Batched forward: [batch, state] → [batch, action]. This is the real work; the 1D
+    // `forward` is just a single-row convenience wrapper.
+    pub fn forward_batch(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        let x = self.linear1.forward(input);
+        let x = self.activation.forward(x);
+        // No ReLU on the output: Q-values can be negative, clamping them would bias learning
+        self.linear2.forward(x)
+    }
+
     pub fn forward(&self, input: Tensor<B, 1>) -> Tensor<B, 1> {
         // burn's Linear requires 2D input (batch × features); add a dummy batch dim
-        let x = input.unsqueeze::<2>();
-        let x = self.linear1.forward(x);
-        let x = self.activation.forward(x);
-        let x = self.linear2.forward(x);
-        // No ReLU on the output: Q-values can be negative, clamping them would bias learning
-        x.squeeze::<1>()
+        self.forward_batch(input.unsqueeze::<2>()).squeeze::<1>()
     }
 }
 
@@ -48,16 +52,17 @@ impl<B: AutodiffBackend> NeuralNetwork<B> {
     pub fn train_step<O: Optimizer<NeuralNetwork<B>, B>>(
         self,
         optimizer: &mut O,
-        input: Tensor<B, 1>,
-        target: Tensor<B, 1>,
+        input: Tensor<B, 2>,
+        target: Tensor<B, 2>,
         lr: f64,
     ) -> Self {
-        let outputs = self.forward(input);
-        // Huber loss is more robust than MSE when rewards have occasional large spikes
+        let outputs = self.forward_batch(input);
+        // Huber loss is more robust than MSE when rewards have occasional large spikes.
+        // Mean reduction averages the loss over the whole minibatch.
         let loss = HuberLossConfig::new(1.0).init().forward(
             outputs,
             target,
-            burn::nn::loss::Reduction::Auto,
+            burn::nn::loss::Reduction::Mean,
         );
         let grads = loss.backward();
         let grads = GradientsParams::from_grads(grads, &self);
