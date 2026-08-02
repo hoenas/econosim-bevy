@@ -82,3 +82,78 @@ impl CompanyState {
         1 + 3 * resource_count + recipe_count
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn size_matches_feature_vector_length() {
+        // The network is built with `size`, so it must equal what `as_vec` actually produces.
+        for (res, rec) in [(0, 0), (1, 1), (4, 1), (3, 5)] {
+            let state = CompanyState::new(res, rec);
+            assert_eq!(CompanyState::size(res, rec), state.as_vec().len());
+        }
+    }
+
+    #[test]
+    fn initial_seeds_money_and_zeroes_the_rest() {
+        let state = CompanyState::initial(3, 2, 1000.0);
+        assert_eq!(state.money, 1000.0);
+        assert_eq!(state.stock, vec![0.0; 3]);
+        assert_eq!(state.price_index, vec![0.0; 3]);
+        assert_eq!(state.order_index, vec![0.0; 3]);
+        assert_eq!(state.processor_counts, vec![0.0; 2]);
+    }
+
+    #[test]
+    fn net_worth_of_fresh_company_is_just_cash() {
+        // No stock or processors yet, so net worth equals starting cash regardless of prices.
+        let state = CompanyState::initial(3, 2, 1000.0);
+        assert_eq!(state.net_worth(100.0), 1000.0);
+    }
+
+    #[test]
+    fn net_worth_values_stock_at_price_and_processors_at_cost() {
+        let state = CompanyState {
+            money: 500.0,
+            stock: vec![2.0, 3.0],
+            price_index: vec![10.0, 4.0], // stock value: 2*10 + 3*4 = 32
+            order_index: vec![0.0, 0.0],  // not part of net worth
+            processor_counts: vec![1.0, 2.0], // 3 processors * 100 = 300
+        };
+        assert_eq!(state.net_worth(100.0), 500.0 + 32.0 + 300.0);
+    }
+
+    #[test]
+    fn buying_resource_at_market_price_is_net_worth_neutral() {
+        // The whole point of the net-worth reward: moving cash into stock at the going price
+        // leaves net worth unchanged, so investing is not punished as a loss.
+        let price = 10.0;
+        let before = CompanyState {
+            money: 1000.0,
+            stock: vec![0.0],
+            price_index: vec![price],
+            order_index: vec![0.0],
+            processor_counts: vec![],
+        };
+        let after = CompanyState {
+            money: 1000.0 - price * 5.0, // spent on 5 units
+            stock: vec![5.0],
+            ..before.clone()
+        };
+        assert_eq!(after.net_worth(0.0), before.net_worth(0.0));
+    }
+
+    #[test]
+    fn buying_processor_at_cost_is_net_worth_neutral() {
+        let processor_price = 100.0;
+        let before = CompanyState::initial(0, 1, 1000.0);
+        let after = CompanyState {
+            money: 900.0,
+            processor_counts: vec![1.0],
+            ..before.clone()
+        };
+        assert_eq!(after.net_worth(processor_price), before.net_worth(processor_price));
+    }
+}
