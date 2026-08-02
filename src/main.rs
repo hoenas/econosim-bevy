@@ -120,19 +120,24 @@ fn create_consumers_and_producers(mut commands: Commands) {
         });
     }
 
-    // Power plant: fuel demand for Coal, competing with the smelters/glass/brick makers that
-    // also need it. The only terminal demand so far — the finished-goods consumer roster is
-    // the next step.
+    // Power plant: burns Coal at a steady rate, competing for it with the smelters/glass/brick
+    // makers. Bids 4.0 when well-stocked (above the 3.0 miner price so it restocks cheaply),
+    // rising toward 12.0 as its buffer empties. The only terminal demand so far — the
+    // finished-goods consumer roster is the next step.
+    let power_plant_target = 2000.0;
     commands.spawn(Consumer {
         name: Name(String::from("Power Plant")),
         config: ConsumerConfig {
             demands: vec![Demand {
                 resource: COAL,
-                amount: 10000.0,
-                max_price: 10.0,
+                consumption_rate: 50.0,
+                target_stock: power_plant_target,
+                base_price: 4.0,
+                max_price: 12.0,
             }],
-            ticks_between_orders: 100,
-            ticks_since_last_order: 0,
+        },
+        stock: Stock {
+            resources: HashMap::from([(COAL, power_plant_target)]),
         },
     });
 }
@@ -213,7 +218,21 @@ fn do_reset(world: &mut World) {
         q.iter(world).collect()
     };
     for entity in consumers {
-        world.entity_mut(entity).get_mut::<ConsumerConfig>().unwrap().ticks_since_last_order = 0;
+        // Restock each consumer to its target buffer so episodes start from a clean state.
+        let targets: Vec<(usize, f64)> = world
+            .entity(entity)
+            .get::<ConsumerConfig>()
+            .unwrap()
+            .demands
+            .iter()
+            .map(|d| (d.resource, d.target_stock))
+            .collect();
+        let mut entity_mut = world.entity_mut(entity);
+        let mut stock = entity_mut.get_mut::<Stock>().unwrap();
+        stock.resources.clear();
+        for (resource, amount) in targets {
+            stock.resources.insert(resource, amount);
+        }
     }
 }
 

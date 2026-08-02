@@ -55,7 +55,9 @@ pub fn execute_orders(
     mut commands: Commands,
     mut orders: Query<(Entity, &mut Order)>,
     mut offers: Query<(Entity, &mut Offer)>,
-    mut companies: Query<(&mut Stock, &mut Money)>,
+    // Also matches consumers: they carry a Stock (their storage) but no Money, which we treat
+    // as an unlimited budget — they are the economy's exogenous demand / money source.
+    mut companies: Query<(&mut Stock, Option<&mut Money>)>,
     mut market_data: ResMut<Marketplace>,
 ) {
     for (order_entity, mut order) in orders.iter_mut() {
@@ -79,6 +81,16 @@ pub fn execute_orders(
             // Self-trade: buyer and seller are the same company. Money and stock net
             // to zero, so we skip the company mutations to avoid a double-borrow panic.
             let is_self_trade = buyer.is_some() && buyer == seller;
+            // Consumers carry a Stock but no Money; only real companies count toward the
+            // company-order statistics below.
+            let buyer_is_company = match buyer {
+                Some(e) => companies
+                    .as_readonly()
+                    .get(e)
+                    .map(|(_, money)| money.is_some())
+                    .unwrap_or(false),
+                None => false,
+            };
 
             // Cap the fill by what the buyer can actually afford.
             let max_affordable = if let Some(buyer_entity) = buyer {
@@ -86,8 +98,12 @@ pub fn execute_orders(
                     f64::MAX
                 } else {
                     let companies_ro = companies.as_readonly();
-                    let (_, m) = companies_ro.get(buyer_entity).unwrap();
-                    if offer_price > 0.0 { m.0 / offer_price } else { f64::MAX }
+                    let (_, money) = companies_ro.get(buyer_entity).unwrap();
+                    match money {
+                        // A buyer with no Money component (a consumer) buys without limit.
+                        Some(m) if offer_price > 0.0 => m.0 / offer_price,
+                        _ => f64::MAX,
+                    }
                 }
             } else {
                 f64::MAX // consumers have no tracked money
@@ -109,20 +125,25 @@ pub fn execute_orders(
             // buying from itself has zero net effect on money or stock.
             if !is_self_trade {
                 if let Some(buyer_entity) = buyer {
-                    let (mut stock, mut money) = companies.get_mut(buyer_entity).unwrap();
-                    money.0 -= offer_price * filled;
+                    let (mut stock, money) = companies.get_mut(buyer_entity).unwrap();
+                    // Consumers (no Money) receive the goods but pay from an unlimited budget.
+                    if let Some(mut money) = money {
+                        money.0 -= offer_price * filled;
+                    }
                     *stock.resources.entry(order.resource).or_insert(0.0) += filled;
                 }
                 if let Some(seller_entity) = seller {
-                    let (mut stock, mut money) = companies.get_mut(seller_entity).unwrap();
-                    money.0 += offer_price * filled;
+                    let (mut stock, money) = companies.get_mut(seller_entity).unwrap();
+                    if let Some(mut money) = money {
+                        money.0 += offer_price * filled;
+                    }
                     // Deduct sold units from the seller's stock; floor at 0 to absorb rounding.
                     let held = stock.resources.entry(offer_resource).or_insert(0.0);
                     *held = (*held - filled).max(0.0);
                 }
             }
 
-            if buyer.is_some() {
+            if buyer_is_company {
                 if order_satisfied {
                     market_data.statistics.company_orders_fulfilled += 1;
                 } else {
@@ -353,6 +374,35 @@ mod tests {
         assert_eq!(*app.world().get::<Stock>(buyer).unwrap().resources.get(&0).unwrap(), 5.0);
         // order is still open (partially unfilled), money floor not breached
         assert!(app.world().entities().contains(order_e));
+    }
+
+    #[test]
+    fn consumer_without_money_receives_goods_and_pays_nothing() {
+        // A consumer has Stock but no Money: unlimited budget, goods delivered into storage,
+        // and the selling company is still paid (money enters the economy from the consumer).
+        let mut app = app();
+        let seller = app.world_mut().spawn((Stock::default(), Money(0.0))).id();
+        app.world_mut().spawn(Offer {
+            resource: 0,
+            amount: 10.0,
+            price_per_unit: 5.0,
+            company: Some(seller),
+        });
+        let consumer = app.world_mut().spawn(Stock::default()).id(); // no Money
+        app.world_mut().spawn(Order {
+            resource: 0,
+            amount: 4.0,
+            max_price_per_unit: 10.0,
+            company: Some(consumer),
+        });
+        app.update();
+        // consumer's storage grew by the filled amount, seller was paid 5.0 * 4.0
+        assert_eq!(*app.world().get::<Stock>(consumer).unwrap().resources.get(&0).unwrap(), 4.0);
+        assert_eq!(app.world().get::<Money>(seller).unwrap().0, 20.0);
+        // ...and the consumer's purchase does not count toward company-order statistics
+        let stats = &app.world().resource::<Marketplace>().statistics;
+        assert_eq!(stats.company_orders_fulfilled, 0);
+        assert_eq!(stats.company_orders_partly_fulfilled, 0);
     }
 
     #[test]
