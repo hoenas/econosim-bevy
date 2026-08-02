@@ -197,6 +197,10 @@ pub fn draw_dashboard(
 
                 ui.separator();
 
+                ui.label("Auto-reset:");
+                ui.add(egui::DragValue::new(&mut sim_state.auto_reset_interval).range(0..=u32::MAX).suffix(" ticks"));
+                ui.label(format!("(tick {}/{})", sim_state.tick_count, sim_state.auto_reset_interval));
+
                 let mut hz = 1.0 / time_fixed.timestep().as_secs_f64();
                 ui.label("Speed:");
                 if ui

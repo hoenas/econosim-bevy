@@ -7,6 +7,9 @@ pub struct SimState {
     pub reset_requested: bool,
     pub spawn_company_requested: bool,
     pub remove_company_requested: Option<bevy::prelude::Entity>,
+    /// Automatically reset after this many ticks. 0 = disabled.
+    pub auto_reset_interval: u32,
+    pub tick_count: u32,
 }
 
 impl Default for SimState {
@@ -17,6 +20,8 @@ impl Default for SimState {
             reset_requested: false,
             spawn_company_requested: false,
             remove_company_requested: None,
+            auto_reset_interval: 200,
+            tick_count: 0,
         }
     }
 }

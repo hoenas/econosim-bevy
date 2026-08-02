@@ -153,6 +153,7 @@ fn sync_sim_time(sim_state: Res<SimState>, mut time_virtual: ResMut<Time<Virtual
 fn do_reset(world: &mut World) {
     *world.resource_mut::<SimHistory>() = SimHistory::default();
     *world.resource_mut::<Marketplace>() = Marketplace::default();
+    world.resource_mut::<SimState>().tick_count = 0;
 
     let to_despawn: Vec<Entity> = {
         let mut q = world.query_filtered::<Entity, Or<(With<Order>, With<Offer>)>>();
@@ -230,6 +231,17 @@ fn spawn_new_company(
         marker: CompanyMarker::default(),
         color: RenderColor::default(),
     });
+}
+
+fn auto_reset(mut sim_state: ResMut<SimState>) {
+    if sim_state.auto_reset_interval == 0 {
+        return;
+    }
+    sim_state.tick_count += 1;
+    if sim_state.tick_count >= sim_state.auto_reset_interval {
+        sim_state.tick_count = 0;
+        sim_state.reset_requested = true;
+    }
 }
 
 fn remove_company(world: &mut World) {
@@ -480,6 +492,7 @@ fn main() {
             PostUpdate,
             (spawn_new_company, remove_company, reset_simulation, step_simulation, save_simulation, load_simulation).chain(),
         )
+        .add_systems(FixedUpdate, auto_reset)
         .add_systems(FixedUpdate, control_companies)
         .add_systems(FixedUpdate, update_sim_history.after(control_companies))
         .add_systems(FixedUpdate, update_marketplace_history.after(update_price_index).after(update_order_index))
