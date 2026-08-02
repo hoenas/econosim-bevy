@@ -35,6 +35,10 @@ pub struct CompanyQState {
     // Option because optimizer.step() takes the network by value; we use take/put to move it
     // in and out without requiring an additional heap allocation.
     pub network: Option<NeuralNetwork<MyAutodiffBackend>>,
+    // Inner-backend (non-autodiff) mirror of the live network, refreshed once per train step.
+    // Inference reads this instead of calling `.valid()` on every forward pass, which would
+    // rebuild the whole module from the autodiff graph each time.
+    online_inner: NeuralNetwork<MyBackend>,
     // Frozen copy on the inner (non-autodiff) backend — no graph nodes allocated during inference.
     // Updated every TARGET_UPDATE_INTERVAL train steps.
     target_network: NeuralNetwork<MyBackend>,
@@ -47,9 +51,12 @@ pub struct CompanyQState {
 impl CompanyQState {
     pub fn new(device: &WgpuDevice, state_size: usize, action_size: usize) -> Self {
         let network = NeuralNetwork::new(device, state_size, action_size);
+        // Both inner-backend copies start as mirrors of the freshly initialized live network.
+        let online_inner = network.valid();
         let target_network = NeuralNetwork::<MyBackend>::new(device, state_size, action_size);
         Self {
             network: Some(network),
+            online_inner,
             target_network,
             optimizer: AdamConfig::new().init(),
             replay: VecDeque::with_capacity(REPLAY_CAPACITY),
@@ -91,22 +98,25 @@ impl CompanyQState {
         lr: f64,
     ) {
         let network = self.network.take().unwrap();
-        self.network = Some(network.train_step(&mut self.optimizer, input, target, lr));
+        let network = network.train_step(&mut self.optimizer, input, target, lr);
+        // Refresh the inner-backend inference mirror to match the updated weights.
+        // valid() strips autodiff from every parameter tensor — no graph nodes kept.
+        self.online_inner = network.valid();
+        self.network = Some(network);
         self.steps += 1;
-        if self.steps % TARGET_UPDATE_INTERVAL == 0 {
-            // valid() strips autodiff from every parameter tensor — no graph nodes kept.
-            self.target_network = self.network.as_ref().unwrap().valid();
+        if self.steps.is_multiple_of(TARGET_UPDATE_INTERVAL) {
+            self.target_network = self.online_inner.clone();
         }
     }
 
     // Inference on the live network without building an autodiff graph.
     pub fn infer(&self, input: Tensor<MyBackend, 1>) -> Tensor<MyBackend, 1> {
-        self.network.as_ref().unwrap().valid().forward(input)
+        self.online_inner.forward(input)
     }
 
     // Batched inference on the live network (state batch → Q batch), no autodiff.
     pub fn infer_batch(&self, input: Tensor<MyBackend, 2>) -> Tensor<MyBackend, 2> {
-        self.network.as_ref().unwrap().valid().forward_batch(input)
+        self.online_inner.forward_batch(input)
     }
 
     // Batched inference on the frozen target network — never touches autodiff.
@@ -116,10 +126,5 @@ impl CompanyQState {
 }
 
 // Stored as a NonSend resource so the GPU handles stay on the main thread
+#[derive(Default)]
 pub struct QNetworkStore(pub HashMap<Entity, CompanyQState>);
-
-impl Default for QNetworkStore {
-    fn default() -> Self {
-        QNetworkStore(HashMap::new())
-    }
-}

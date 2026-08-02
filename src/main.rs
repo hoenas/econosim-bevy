@@ -11,7 +11,6 @@ use econosim_bevy::components::economy::company::Company;
 use econosim_bevy::components::economy::company::CompanyMarker;
 use econosim_bevy::components::economy::consumer::Consumer;
 use econosim_bevy::components::economy::consumer::ConsumerConfig;
-use econosim_bevy::components::economy::money::LastTickMoney;
 use econosim_bevy::components::economy::money::Money;
 use econosim_bevy::components::economy::offer::Offer;
 use econosim_bevy::components::economy::order::Order;
@@ -75,8 +74,11 @@ fn create_companies(mut commands: Commands, resources: Res<Resources>, recipes: 
                 resources: HashMap::new(),
             },
             money: Money(1000.0),
-            last_tick_money: LastTickMoney(1000.0),
-            last_state: CompanyState::new(resources.resources.len(), recipes.recipes.len()),
+            last_state: CompanyState::initial(
+                resources.resources.len(),
+                recipes.recipes.len(),
+                1000.0,
+            ),
             last_action: CompanyAction(0),
             confidence: CompanyConfidence::default(),
             processors: Processors {
@@ -91,7 +93,7 @@ fn create_companies(mut commands: Commands, resources: Res<Resources>, recipes: 
 
 fn create_consumers_and_producers(mut commands: Commands) {
     commands.spawn(Producer {
-        name: Name(String::from("Water Procucer")),
+        name: Name(String::from("Water Producer")),
         config: ProducerConfig {
             resource: 0,
             offer_amount: 10000.0,
@@ -101,7 +103,7 @@ fn create_consumers_and_producers(mut commands: Commands) {
         },
     });
     commands.spawn(Producer {
-        name: Name(String::from("Dirt Procucer")),
+        name: Name(String::from("Dirt Producer")),
         config: ProducerConfig {
             resource: 1,
             offer_amount: 10000.0,
@@ -111,7 +113,7 @@ fn create_consumers_and_producers(mut commands: Commands) {
         },
     });
     commands.spawn(Producer {
-        name: Name(String::from("Wood Procucer")),
+        name: Name(String::from("Wood Producer")),
         config: ProducerConfig {
             resource: 2,
             offer_amount: 10000.0,
@@ -189,10 +191,9 @@ fn do_reset(world: &mut World) {
     for entity in &companies {
         world.entity_mut(*entity).insert((
             Money(1000.0),
-            LastTickMoney(1000.0),
             Stock { resources: HashMap::new() },
             Processors { processors: vec![] },
-            CompanyState::new(resource_ids.len(), recipes_len),
+            CompanyState::initial(resource_ids.len(), recipes_len, 1000.0),
             CompanyAction(0),
             CompanyConfidence::default(),
         ));
@@ -228,8 +229,11 @@ fn spawn_new_company(
     commands.spawn(Company {
         stock: Stock { resources: HashMap::new() },
         money: Money(1000.0),
-        last_tick_money: LastTickMoney(1000.0),
-        last_state: CompanyState::new(resources.resources.len(), recipes.recipes.len()),
+        last_state: CompanyState::initial(
+            resources.resources.len(),
+            recipes.recipes.len(),
+            1000.0,
+        ),
         last_action: CompanyAction(0),
         confidence: CompanyConfidence::default(),
         processors: Processors { processors: vec![] },
@@ -354,7 +358,7 @@ fn save_simulation(world: &mut World) {
 
     let res_count = resources.len();
     let rec_count = recipes.len();
-    let state_size = CompanyState::new(res_count, rec_count).get_size(res_count, rec_count);
+    let state_size = CompanyState::size(res_count, rec_count);
     let action_size = world.resource::<ActionSpace>().actions.len();
 
     let metadata = SaveMetadata {
@@ -381,12 +385,12 @@ fn save_simulation(world: &mut World) {
     let q_store = world.non_send_resource::<QNetworkStore>();
     let recorder = CompactRecorder::new();
     for (i, (entity, company_name)) in companies.iter().enumerate() {
-        if let Some(q_state) = q_store.0.get(entity) {
-            if let Some(network) = &q_state.network {
-                let path = save_dir.join(format!("company_{}", i));
-                if let Err(e) = recorder.record(network.clone().into_record(), path) {
-                    error!("Failed to save network for '{}': {}", company_name, e);
-                }
+        if let Some(q_state) = q_store.0.get(entity)
+            && let Some(network) = &q_state.network
+        {
+            let path = save_dir.join(format!("company_{}", i));
+            if let Err(e) = recorder.record(network.clone().into_record(), path) {
+                error!("Failed to save network for '{}': {}", company_name, e);
             }
         }
     }
@@ -418,7 +422,7 @@ fn load_simulation(world: &mut World) {
     // Validate that network dimensions match the current world
     let res_count = world.resource::<Resources>().resources.len();
     let rec_count = world.resource::<Recipes>().recipes.len();
-    let cur_state = CompanyState::new(res_count, rec_count).get_size(res_count, rec_count);
+    let cur_state = CompanyState::size(res_count, rec_count);
     let cur_action = world.resource::<ActionSpace>().actions.len();
     if meta.state_size != cur_state || meta.action_size != cur_action {
         error!(
@@ -501,18 +505,28 @@ fn main() {
             (spawn_new_company, remove_company, reset_simulation, step_simulation, save_simulation, load_simulation).chain(),
         )
         .add_systems(FixedUpdate, auto_reset)
-        .add_systems(FixedUpdate, control_companies)
-        .add_systems(FixedUpdate, update_sim_history.after(control_companies))
+        // One deterministic tick pipeline: refresh producer/consumer supply and demand, rebuild
+        // the market indices, let the RL agents observe that fresh state and act, then settle
+        // trades, run production, and age out expired orders/offers. Chaining pins the
+        // observe → act → settle order the DQN transition (s, a, r, s') depends on.
+        .add_systems(
+            FixedUpdate,
+            (
+                manage_consumers,
+                manage_producers,
+                update_price_index,
+                update_order_index,
+                control_companies,
+                execute_orders,
+                update_processors,
+                update_time_to_live,
+            )
+                .chain(),
+        )
+        .add_systems(FixedUpdate, update_sim_history.after(execute_orders))
         .add_systems(FixedUpdate, update_marketplace_history.after(update_price_index).after(update_order_index))
         .add_systems(EguiPrimaryContextPass, draw_dashboard)
         .add_systems(EguiPrimaryContextPass, draw_marketplace_dashboard)
         .add_systems(EguiPrimaryContextPass, draw_training_dashboard)
-        .add_systems(FixedUpdate, update_processors)
-        .add_systems(FixedUpdate, (manage_consumers, manage_producers))
-        .add_systems(FixedUpdate, update_time_to_live)
-        .add_systems(
-            FixedUpdate,
-            (update_price_index, update_order_index, execute_orders),
-        )
         .run();
 }

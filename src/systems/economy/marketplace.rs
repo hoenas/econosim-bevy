@@ -7,7 +7,6 @@ use crate::resources::economy::resources::{ResourceHandle, Resources};
 use bevy::prelude::Query;
 use bevy::prelude::Res;
 use bevy::prelude::*;
-use itertools::Itertools;
 use ordered_float::OrderedFloat;
 
 pub fn update_price_index(
@@ -26,7 +25,7 @@ pub fn update_order_index(
     resources: Res<Resources>,
     mut market_data: ResMut<Marketplace>,
 ) {
-    for resource_handle in resources.resources.keys().sorted() {
+    for resource_handle in resources.resources.keys() {
         let order = get_highest_order(*resource_handle, orders.iter());
         market_data.order_index.insert(*resource_handle, order);
     }

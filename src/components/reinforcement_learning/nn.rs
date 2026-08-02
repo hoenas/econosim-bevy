@@ -1,4 +1,3 @@
-use bevy::prelude::Component;
 use burn::Tensor;
 use burn::module::Module;
 use burn::nn::loss::HuberLossConfig;
@@ -7,7 +6,7 @@ use burn::optim::{GradientsParams, Optimizer};
 use burn::prelude::Backend;
 use burn::tensor::backend::AutodiffBackend;
 
-#[derive(Module, Debug, Component)]
+#[derive(Module, Debug)]
 pub struct NeuralNetwork<B: Backend> {
     linear1: Linear<B>,
     linear2: Linear<B>,

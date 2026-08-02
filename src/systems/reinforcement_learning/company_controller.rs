@@ -1,5 +1,5 @@
 use crate::components::common::{Name, TimeToLive};
-use crate::components::economy::money::{LastTickMoney, Money};
+use crate::components::economy::money::Money;
 use crate::components::economy::offer::{Offer, OfferBundle};
 use crate::components::economy::order::{Order, OrderBundle};
 use crate::components::economy::processor::{Processor, Processors, Productive};
@@ -17,6 +17,7 @@ use crate::resources::reinforcement_learning::action_space::{ActionSpace, Compan
 use crate::resources::reinforcement_learning::backend::{MyAutodiffBackend, MyBackend};
 use crate::resources::reinforcement_learning::q_networks::{CompanyQState, QNetworkStore, Transition};
 use crate::resources::reinforcement_learning::training_history::TrainingHistory;
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use burn::Tensor;
 use itertools::Itertools;
@@ -33,38 +34,58 @@ const EPS_START: f64 = 1.0;
 const EPS_END: f64 = 0.05;
 const EPS_DECAY_STEPS: f64 = 20_000.0;
 
+/// The mutable per-company view the controller iterates over.
+type CompanyQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static Name,
+        &'static Stock,
+        &'static mut Processors,
+        &'static mut Money,
+        &'static mut CompanyState,
+        &'static mut CompanyAction,
+        &'static mut CompanyConfidence,
+    ),
+>;
+
+/// Read-only world configuration the controller consults every tick, grouped so the system
+/// signature stays under clippy's argument-count limit.
+#[derive(SystemParam)]
+pub struct EconomyContext<'w> {
+    resources: Res<'w, Resources>,
+    recipes: Res<'w, Recipes>,
+    processor_price: Res<'w, ProcessorPrice>,
+    action_space: Res<'w, ActionSpace>,
+}
+
 pub fn control_companies(
     mut commands: Commands,
     mut q_networks: NonSendMut<QNetworkStore>,
-    mut companies: Query<(
-        Entity,
-        &Name,
-        &Stock,
-        &mut Processors,
-        &mut Money,
-        &mut LastTickMoney,
-        &mut CompanyState,
-        &mut CompanyAction,
-        &mut CompanyConfidence,
-    )>,
-    resources: Res<Resources>,
-    recipes: Res<Recipes>,
-    processor_price: Res<ProcessorPrice>,
-    action_space: Res<ActionSpace>,
+    mut companies: CompanyQuery,
+    econ: EconomyContext,
     mut marketplace: ResMut<Marketplace>,
     mut training: ResMut<TrainingHistory>,
 ) {
+    let EconomyContext {
+        resources,
+        recipes,
+        processor_price,
+        action_space,
+    } = &econ;
+
     let device = burn::backend::wgpu::WgpuDevice::default();
-    let state_size =
-        CompanyState::new(resources.resources.len(), recipes.recipes.len())
-            .get_size(resources.resources.len(), recipes.recipes.len());
+    let state_size = CompanyState::size(resources.resources.len(), recipes.recipes.len());
     let action_size = action_space.actions.len();
     // Sorted so action indices (BuyResource(i)) map to the same resource as state indices
     let sorted_resource_ids: Vec<usize> =
         resources.resources.keys().copied().sorted().collect();
     let mut rng = rand::rng();
+    // Representative exploration rate for the UI; overwritten each company, all decay in step.
+    let mut epsilon = training.epsilon;
 
-    for (entity, _name, stock, mut processors, mut money, mut last_tick_money, mut last_state, mut last_action, mut confidence) in
+    for (entity, _name, stock, mut processors, mut money, mut last_state, mut last_action, mut confidence) in
         companies.iter_mut()
     {
         // Each company gets its own network and optimizer, initialized lazily
@@ -116,7 +137,11 @@ pub fn control_companies(
         // We observed transition (s, a, r, s'); store it and train on a decorrelated
         // minibatch rather than only this single, highly-correlated sample.
         let a = last_action.0;
-        let raw_reward = money.0 - last_tick_money.0;
+        // Reward is the change in mark-to-market net worth, not just cash flow: buying an
+        // asset moves cash into stock/processors and nets to ~0, so investing is no longer
+        // punished as if it were a loss.
+        let raw_reward = current_state.net_worth(processor_price.0)
+            - last_state.net_worth(processor_price.0);
         // Scale the reward like the money input so TD targets stay in the same range as
         // the network's outputs; otherwise Huber loss clips every error into its linear
         // region and gradients stall.
@@ -175,7 +200,7 @@ pub fn control_companies(
         let q_prime = q_prime_data.as_slice::<f32>().unwrap();
 
         // Decayed epsilon-greedy: explore with the current (annealing) probability.
-        let epsilon = EPS_END
+        epsilon = EPS_END
             + (EPS_START - EPS_END) * (-(q_state.train_steps() as f64) / EPS_DECAY_STEPS).exp();
         let exploring = rng.random::<f64>() < epsilon;
         let next_action_index = if exploring {
@@ -218,33 +243,30 @@ pub fn control_companies(
                 }
             }
             CompanyActionEnum::SellProcessor(recipe) => {
-                if *recipe < recipes.recipes.len() {
-                    if let Some(i) = processors
+                if *recipe < recipes.recipes.len()
+                    && let Some(i) = processors
                         .processors
                         .iter()
                         .position(|p| p.recipe.0 == *recipe)
-                    {
-                        processors.processors.remove(i);
-                    }
+                {
+                    processors.processors.remove(i);
                 }
             }
             CompanyActionEnum::BuyResource(resource_idx, amount) => {
-                if let Some(&resource_id) = sorted_resource_ids.get(*resource_idx) {
-                    if let Some(Some((_, best_price))) =
-                        marketplace.price_index.get(&resource_id)
-                    {
-                        let best_price = *best_price;
-                        commands.spawn(OrderBundle {
-                            order: Order {
-                                amount: *amount as f64,
-                                max_price_per_unit: best_price,
-                                company: Some(entity),
-                                resource: resource_id,
-                            },
-                            time_to_live: TimeToLive(100),
-                        });
-                        marketplace.statistics.company_orders_placed += 1;
-                    }
+                if let Some(&resource_id) = sorted_resource_ids.get(*resource_idx)
+                    && let Some(Some((_, best_price))) = marketplace.price_index.get(&resource_id)
+                {
+                    let best_price = *best_price;
+                    commands.spawn(OrderBundle {
+                        order: Order {
+                            amount: *amount as f64,
+                            max_price_per_unit: best_price,
+                            company: Some(entity),
+                            resource: resource_id,
+                        },
+                        time_to_live: TimeToLive(100),
+                    });
+                    marketplace.statistics.company_orders_placed += 1;
                 }
             }
             CompanyActionEnum::SellResource(resource_idx, amount) => {
@@ -252,35 +274,34 @@ pub fn control_companies(
                     // Cap the offer to what the company actually holds right now.
                     let available = stock.resources.get(&resource_id).copied().unwrap_or(0.0);
                     let offer_amount = (*amount as f64).min(available);
-                    if offer_amount > 0.0 {
-                        if let Some(Some((_, best_price))) =
+                    if offer_amount > 0.0
+                        && let Some(Some((_, best_price))) =
                             marketplace.order_index.get(&resource_id)
-                        {
-                            let best_price = *best_price;
-                            commands.spawn(OfferBundle {
-                                offer: Offer {
-                                    amount: offer_amount,
-                                    price_per_unit: best_price,
-                                    company: Some(entity),
-                                    resource: resource_id,
-                                },
-                                time_to_live: TimeToLive(100),
-                            });
-                            marketplace.statistics.company_offers_placed += 1;
-                        }
+                    {
+                        let best_price = *best_price;
+                        commands.spawn(OfferBundle {
+                            offer: Offer {
+                                amount: offer_amount,
+                                price_per_unit: best_price,
+                                company: Some(entity),
+                                resource: resource_id,
+                            },
+                            time_to_live: TimeToLive(100),
+                        });
+                        marketplace.statistics.company_offers_placed += 1;
                     }
                 }
             }
         }
 
         // Record (s', a') so the next tick can compute the transition (s', a', r', s'')
-        *last_tick_money = LastTickMoney(money.0);
         *last_state = current_state;
         *last_action = CompanyAction(next_action_index);
 
-        // Accumulate the learning curve: raw per-tick PnL into the in-progress episode.
+        // Accumulate the learning curve: raw per-tick net-worth PnL into the in-progress episode.
         let record = training.companies.entry(entity).or_default();
         record.current_return += raw_reward;
-        training.epsilon = epsilon;
     }
+
+    training.epsilon = epsilon;
 }

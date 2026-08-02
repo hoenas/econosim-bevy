@@ -156,6 +156,9 @@ pub fn update_sim_history(
 }
 
 /// Draws the Company Dashboard egui window.
+// A UI system legitimately needs many resources; grouping them behind a SystemParam would
+// add indirection without improving readability.
+#[allow(clippy::too_many_arguments)]
 pub fn draw_dashboard(
     mut contexts: EguiContexts,
     history: Res<SimHistory>,
