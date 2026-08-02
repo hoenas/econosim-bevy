@@ -51,12 +51,25 @@ mod tests {
     use crate::components::economy::processor::{Processor, Productive};
     use crate::components::economy::production_speed::ProductionSpeed;
     use crate::components::economy::recipe::Recipe;
+    use crate::resources::economy::recipes::Recipe as RecipeDef;
     use bevy::prelude::*;
+    use std::collections::HashMap;
 
-    // Default Recipes: recipe 0 consumes {0:10, 1:10, 2:10} and produces {3:1}.
+    // A self-contained recipe so the test does not depend on the default economy's recipe
+    // list: recipe 0 consumes {0:10, 1:10, 2:10} and produces {3:1}.
     fn app() -> App {
+        let mut recipes = HashMap::new();
+        recipes.insert(
+            0,
+            RecipeDef {
+                name: "Test".to_string(),
+                ingredients: HashMap::from([(0, 10.0), (1, 10.0), (2, 10.0)]),
+                products: HashMap::from([(3, 1.0)]),
+                production_speed: 1.0,
+            },
+        );
         let mut a = App::new();
-        a.init_resource::<Recipes>();
+        a.insert_resource(Recipes { recipes });
         a.add_systems(Update, update_processors);
         a
     }

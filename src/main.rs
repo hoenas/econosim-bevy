@@ -11,6 +11,7 @@ use econosim_bevy::components::economy::company::Company;
 use econosim_bevy::components::economy::company::CompanyMarker;
 use econosim_bevy::components::economy::consumer::Consumer;
 use econosim_bevy::components::economy::consumer::ConsumerConfig;
+use econosim_bevy::components::economy::consumer::Demand;
 use econosim_bevy::components::economy::money::Money;
 use econosim_bevy::components::economy::offer::Offer;
 use econosim_bevy::components::economy::order::Order;
@@ -27,7 +28,9 @@ use econosim_bevy::resources::economy::common::Id;
 use econosim_bevy::resources::economy::marketplace::Marketplace;
 use econosim_bevy::resources::economy::processor::ProcessorPrice;
 use econosim_bevy::resources::economy::recipes::Recipes;
-use econosim_bevy::resources::economy::resources::Resources;
+use econosim_bevy::resources::economy::resources::{
+    Resources, COAL, CRUDE_OIL, DIRT, IRON_ORE, SAND, STONE, WATER, WOOD,
+};
 use econosim_bevy::resources::reinforcement_learning::action_space::ActionSpace;
 use econosim_bevy::resources::reinforcement_learning::q_networks::{CompanyQState, QNetworkStore};
 use econosim_bevy::resources::reinforcement_learning::training_history::TrainingHistory;
@@ -92,42 +95,42 @@ fn create_companies(mut commands: Commands, resources: Res<Resources>, recipes: 
 }
 
 fn create_consumers_and_producers(mut commands: Commands) {
-    commands.spawn(Producer {
-        name: Name(String::from("Water Producer")),
-        config: ProducerConfig {
-            resource: 0,
-            offer_amount: 10000.0,
-            offer_price: 1.0,
-            ticks_between_offers: 100,
-            ticks_since_last_offer: 0,
-        },
-    });
-    commands.spawn(Producer {
-        name: Name(String::from("Dirt Producer")),
-        config: ProducerConfig {
-            resource: 1,
-            offer_amount: 10000.0,
-            offer_price: 0.5,
-            ticks_between_offers: 100,
-            ticks_since_last_offer: 0,
-        },
-    });
-    commands.spawn(Producer {
-        name: Name(String::from("Wood Producer")),
-        config: ProducerConfig {
-            resource: 2,
-            offer_amount: 10000.0,
-            offer_price: 2.0,
-            ticks_between_offers: 100,
-            ticks_since_last_offer: 0,
-        },
-    });
+    // (name, resource, offer price). Every raw material now has a supply source, so the
+    // metal, construction and petrochemical chains can actually run.
+    let raws = [
+        ("Water Producer", WATER, 1.0),
+        ("Dirt Producer", DIRT, 0.5),
+        ("Wood Producer", WOOD, 2.0),
+        ("Coal Miner", COAL, 3.0),
+        ("Iron Ore Miner", IRON_ORE, 4.0),
+        ("Sand Pit", SAND, 1.0),
+        ("Stone Quarry", STONE, 2.0),
+        ("Oil Well", CRUDE_OIL, 5.0),
+    ];
+    for (name, resource, offer_price) in raws {
+        commands.spawn(Producer {
+            name: Name(String::from(name)),
+            config: ProducerConfig {
+                resource,
+                offer_amount: 10000.0,
+                offer_price,
+                ticks_between_offers: 100,
+                ticks_since_last_offer: 0,
+            },
+        });
+    }
+
+    // Power plant: fuel demand for Coal, competing with the smelters/glass/brick makers that
+    // also need it. The only terminal demand so far — the finished-goods consumer roster is
+    // the next step.
     commands.spawn(Consumer {
-        name: Name(String::from("Coal Consumer")),
+        name: Name(String::from("Power Plant")),
         config: ConsumerConfig {
-            resource: 3,
-            order_amount: 10000.0,
-            order_max_price: 10.0,
+            demands: vec![Demand {
+                resource: COAL,
+                amount: 10000.0,
+                max_price: 10.0,
+            }],
             ticks_between_orders: 100,
             ticks_since_last_order: 0,
         },
